@@ -36,7 +36,7 @@ export async function buildActorContext(
   extra: ToolExtra,
 ): Promise<ActorContext> {
   const bearer = extra.authInfo?.token ||
-    parseBearerHeader(extra.requestInfo?.headers.get("authorization") ?? null);
+    parseBearerHeader(headerFromExtra(extra, "authorization"));
 
   if (bearer) {
     return {
@@ -55,6 +55,18 @@ export async function buildActorContext(
   }
 
   throw new Error("Missing bearer token. Send Authorization: Bearer <token>.");
+}
+
+function headerFromExtra(extra: ToolExtra, name: string): string | null {
+  const headers = extra.requestInfo?.headers;
+  if (!headers) return null;
+  if (typeof (headers as Headers).get === "function") {
+    return (headers as Headers).get(name);
+  }
+  const record = headers as Record<string, string | string[] | undefined>;
+  const exact = record[name] ?? record[name.toLowerCase()];
+  if (Array.isArray(exact)) return exact.join(", ");
+  return exact ?? null;
 }
 
 async function tokenFingerprint(secret: string, bearer: string): Promise<string> {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stalwart Group Scheduler"
+  short_description: "Schedule groups with Stalwart availability"
+  default_prompt: "Use $stalwart-calendar-group-scheduler to find good meeting slots for this group."

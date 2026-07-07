@@ -2,11 +2,15 @@
   "tasks": {
     "dev:http": "deno run --allow-net --allow-env --allow-read=.env main.ts",
     "dev:stdio": "MCP_TRANSPORT=stdio deno run --allow-net --allow-env --allow-read=.env main.ts",
+    "smoke:http": "deno run --allow-net --allow-env --allow-read=.env scripts/mcp_smoke.ts",
+    "probe:live": "deno run --allow-net --allow-env --allow-read=.env scripts/mcp_live_probe.ts",
     "schemas": "deno run --allow-net --allow-env --allow-read=.env --allow-write=schemas scripts/fetch_schemas.ts",
-    "check": "deno fmt --check && deno lint && deno check main.ts scripts/fetch_schemas.ts && deno test --allow-env --allow-read=.env --allow-net",
+    "check": "deno fmt --check && deno lint && deno check main.ts scripts/fetch_schemas.ts scripts/mcp_smoke.ts scripts/mcp_live_probe.ts && deno test --allow-env --allow-read=.env --allow-net",
     "fmt": "deno fmt"
   },
   "imports": {
+    "@mcp/client": "npm:@modelcontextprotocol/sdk@1.29.0/client/index.js",
+    "@mcp/client/streamable-http": "npm:@modelcontextprotocol/sdk@1.29.0/client/streamableHttp.js",
     "@mcp/server/mcp": "npm:@modelcontextprotocol/sdk@1.29.0/server/mcp.js",
     "@mcp/server/stdio": "npm:@modelcontextprotocol/sdk@1.29.0/server/stdio.js",
     "@mcp/server/web-standard-streamable-http": "npm:@modelcontextprotocol/sdk@1.29.0/server/webStandardStreamableHttp.js",

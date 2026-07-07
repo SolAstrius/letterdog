@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stalwart-jmap-mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stalwart-jmap-mcp
+  namespace: stalwart-jmap-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stalwart-jmap-mcp
+  template:
+    metadata:
+      labels:
+        app: stalwart-jmap-mcp
+    spec:
+      containers:
+        - name: stalwart-jmap-mcp
+          image: registry.sol.moe/stalwart-jmap-mcp:latest
+          imagePullPolicy: Always
+          env:
+            - name: MCP_TRANSPORT
+              value: http
+            - name: PORT
+              value: "8787"
+            - name: STALWART_BASE_URL
+              value: https://mail.astrius.ink
+            - name: STALWART_ALLOW_ENV_BEARER_FALLBACK
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8787
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8787
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8787
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stalwart-jmap-mcp
+  namespace: stalwart-jmap-mcp
+  labels:
+    app: stalwart-jmap-mcp
+spec:
+  type: ClusterIP
+  selector:
+    app: stalwart-jmap-mcp
+  ports:
+    - name: http
+      port: 8787
+      targetPort: 8787
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mcp-mail-astrius-ink-tls
+  namespace: stalwart-jmap-mcp
+spec:
+  secretName: mcp-mail-astrius-ink-tls
+  dnsNames:
+    - mcp.mail.astrius.ink
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: letsencrypt-dns-powerdns
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: stalwart-jmap-mcp
+  namespace: stalwart-jmap-mcp
+  annotations:
+    external-dns.astrius.ink/enabled: "true"
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`mcp.mail.astrius.ink`)
+      services:
+        - name: stalwart-jmap-mcp
+          port: 8787
+  tls:
+    secretName: mcp-mail-astrius-ink-tls

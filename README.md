@@ -14,6 +14,8 @@ with a Deno XML DOM/XPath shim and raw fetch fallbacks for GET/PUT/DELETE iCalen
 ```bash
 deno task schemas
 deno task dev:http
+deno task smoke:http
+deno task probe:live
 deno task check
 ```
 
@@ -30,3 +32,5 @@ https://mcp.mail.astrius.ink/mcp
 ```
 
 See [docs/tool-mapping.md](docs/tool-mapping.md) for the public tool-to-method mapping.
+
+`mcp-client.example.json` contains a minimal Streamable HTTP client registration snippet.

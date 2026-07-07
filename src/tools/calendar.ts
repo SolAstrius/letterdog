@@ -348,6 +348,7 @@ function registerEventTools(server: McpServer, config: EnvConfig): void {
       time_min: z.string().optional(),
       time_max: z.string().optional(),
       query: z.string().optional(),
+      expand_recurrences: z.boolean().optional(),
       properties: propertiesSchema,
       fetch: z.boolean().default(true).optional(),
     },
@@ -357,17 +358,12 @@ function registerEventTools(server: McpServer, config: EnvConfig): void {
         CALENDAR_USING[1],
         args.account_id,
       );
-      const filter = {
-        ...(args.filter ?? {}),
-        ...(args.calendar_ids ? { inCalendars: args.calendar_ids } : {}),
-        ...(args.time_min ? { after: args.time_min } : {}),
-        ...(args.time_max ? { before: args.time_max } : {}),
-        ...(args.query ? { text: args.query } : {}),
-      };
-      const query = await context.jmap.single(account, CALENDAR_USING, "CalendarEvent/query", {
-        accountId: account.accountId,
-        ...pickQuery({ ...args, filter }),
-      });
+      const query = await context.jmap.single(
+        account,
+        CALENDAR_USING,
+        "CalendarEvent/query",
+        calendarEventQueryArgs({ ...args, accountId: account.accountId }),
+      );
       if (args.fetch === false) return { query };
       const ids = asIds(query.ids);
       const get = ids.length
@@ -721,6 +717,7 @@ function pickQuery(args: {
   anchor?: string;
   anchorOffset?: number;
   calculateTotal?: boolean;
+  expandRecurrences?: boolean;
 }): Record<string, unknown> {
   return {
     ...(args.filter ? { filter: args.filter } : {}),
@@ -730,6 +727,39 @@ function pickQuery(args: {
     ...(args.anchor ? { anchor: args.anchor } : {}),
     ...(args.anchorOffset !== undefined ? { anchorOffset: args.anchorOffset } : {}),
     ...(args.calculateTotal !== undefined ? { calculateTotal: args.calculateTotal } : {}),
+    ...(args.expandRecurrences !== undefined ? { expandRecurrences: args.expandRecurrences } : {}),
+  };
+}
+
+export function calendarEventQueryArgs(args: {
+  accountId: string;
+  filter?: Record<string, unknown>;
+  sort?: Record<string, unknown>[];
+  position?: number;
+  limit?: number;
+  anchor?: string;
+  anchorOffset?: number;
+  calculateTotal?: boolean;
+  calendar_ids?: string[];
+  time_min?: string;
+  time_max?: string;
+  query?: string;
+  expand_recurrences?: boolean;
+}): Record<string, unknown> {
+  const filter = combineFilters(
+    args.filter,
+    calendarIdsFilter(args.calendar_ids),
+    compactFilter({
+      ...(args.time_min ? { after: args.time_min } : {}),
+      ...(args.time_max ? { before: args.time_max } : {}),
+      ...(args.query ? { text: args.query } : {}),
+    }),
+  );
+  const expandRecurrences = args.expand_recurrences ??
+    (args.time_min && args.time_max ? true : undefined);
+  return {
+    accountId: args.accountId,
+    ...pickQuery({ ...args, filter, expandRecurrences }),
   };
 }
 
@@ -739,6 +769,31 @@ function asIds(value: unknown): string[] {
 
 function schedulingExtra(sendSchedulingMessages?: boolean): Record<string, unknown> {
   return sendSchedulingMessages === undefined ? {} : { sendSchedulingMessages };
+}
+
+function compactFilter(filter: Record<string, unknown>): Record<string, unknown> | undefined {
+  const entries = Object.entries(filter).filter(([, value]) => value !== undefined);
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function calendarIdsFilter(calendarIds?: string[]): Record<string, unknown> | undefined {
+  if (!calendarIds?.length) return undefined;
+  if (calendarIds.length === 1) return { inCalendar: calendarIds[0] };
+  return {
+    operator: "OR",
+    conditions: calendarIds.map((calendarId) => ({ inCalendar: calendarId })),
+  };
+}
+
+function combineFilters(
+  ...filters: Array<Record<string, unknown> | undefined>
+): Record<string, unknown> {
+  const present = filters.filter((filter): filter is Record<string, unknown> =>
+    !!filter && Object.keys(filter).length > 0
+  );
+  if (!present.length) return {};
+  if (present.length === 1) return present[0];
+  return { operator: "AND", conditions: present };
 }
 
 async function findParticipantId(

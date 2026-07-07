@@ -2,7 +2,7 @@ import { McpServer } from "@mcp/server/mcp";
 import { StdioServerTransport } from "@mcp/server/stdio";
 import { WebStandardStreamableHTTPServerTransport } from "@mcp/server/web-standard-streamable-http";
 import type { EnvConfig } from "../config.ts";
-import { authInfoFromRequest } from "../auth.ts";
+import { authInfoFromRequest, parseBearerHeader } from "../auth.ts";
 import { registerAllTools } from "../tools/index.ts";
 
 function createServer(config: EnvConfig): McpServer {
@@ -14,14 +14,7 @@ function createServer(config: EnvConfig): McpServer {
   return server;
 }
 
-export async function startHttp(config: EnvConfig): Promise<void> {
-  const server = createServer(config);
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
-  await server.connect(transport);
-
+export function startHttp(config: EnvConfig): void {
   Deno.serve({ hostname: "0.0.0.0", port: config.port }, async (request) => {
     const url = new URL(request.url);
     if (url.pathname === "/healthz") return Response.json({ ok: true });
@@ -33,7 +26,22 @@ export async function startHttp(config: EnvConfig): Promise<void> {
       });
     }
     if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 });
+    if (!parseBearerHeader(request.headers.get("authorization"))) {
+      return Response.json(
+        { error: "Missing bearer token. Send Authorization: Bearer <token>." },
+        {
+          status: 401,
+          headers: { "WWW-Authenticate": 'Bearer realm="stalwart-jmap-mcp"' },
+        },
+      );
+    }
 
+    const server = createServer(config);
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    await server.connect(transport);
     return await transport.handleRequest(request, {
       authInfo: authInfoFromRequest(request),
     });

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stalwart Daily Brief"
+  short_description: "One-day Stalwart calendar briefs"
+  default_prompt: "Use $stalwart-calendar-daily-brief to summarize my Stalwart calendar for today."

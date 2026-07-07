@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stalwart Free Up Time"
+  short_description: "Find movable time in Stalwart calendars"
+  default_prompt: "Use $stalwart-calendar-free-up-time to find ways to open a focus block on my Stalwart calendar."

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { McpServer } from "@mcp/server/mcp";
 import type { EnvConfig } from "../config.ts";
+import type { AccountContext } from "../jmap.ts";
 import { PRINCIPAL_USING } from "../jmap.ts";
+import type { ToolContext } from "../server/context.ts";
 import {
   accountIdSchema,
   confirmSchema,
@@ -112,13 +114,11 @@ export function registerPrincipalTools(server: McpServer, config: EnvConfig): vo
         PRINCIPAL_USING[1],
         args.account_id,
       );
-      return await context.jmap.single(account, PRINCIPAL_USING, "Principal/getAvailability", {
-        accountId: account.accountId,
-        ids: args.principal_ids,
+      return await getAvailabilityForIds(context, account, args.principal_ids, {
         utcStart: args.utc_start,
         utcEnd: args.utc_end,
-        ...(args.show_details !== undefined ? { showDetails: args.show_details } : {}),
-        ...(args.event_properties ? { eventProperties: args.event_properties } : {}),
+        showDetails: args.show_details,
+        eventProperties: args.event_properties,
       });
     },
   );
@@ -157,19 +157,12 @@ export function registerPrincipalTools(server: McpServer, config: EnvConfig): vo
       if (!resolvedIds.size) {
         throw new Error("No principal ids resolved for availability request");
       }
-      const availability = await context.jmap.single(
-        account,
-        PRINCIPAL_USING,
-        "Principal/getAvailability",
-        {
-          accountId: account.accountId,
-          ids: [...resolvedIds],
-          utcStart: args.utc_start,
-          utcEnd: args.utc_end,
-          ...(args.show_details !== undefined ? { showDetails: args.show_details } : {}),
-          ...(args.event_properties ? { eventProperties: args.event_properties } : {}),
-        },
-      );
+      const availability = await getAvailabilityForIds(context, account, [...resolvedIds], {
+        utcStart: args.utc_start,
+        utcEnd: args.utc_end,
+        showDetails: args.show_details,
+        eventProperties: args.event_properties,
+      });
       return { resolution, availability };
     },
   );
@@ -387,4 +380,34 @@ function registerParticipantIdentityTools(server: McpServer, config: EnvConfig):
 
 function asIds(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+}
+
+async function getAvailabilityForIds(
+  context: ToolContext,
+  account: AccountContext,
+  ids: string[],
+  args: {
+    utcStart: string;
+    utcEnd: string;
+    showDetails?: boolean;
+    eventProperties?: string[];
+  },
+): Promise<Record<string, unknown>> {
+  const responses: Record<string, unknown> = {};
+  for (const id of ids) {
+    responses[id] = await context.jmap.single(
+      account,
+      PRINCIPAL_USING,
+      "Principal/getAvailability",
+      {
+        accountId: account.accountId,
+        id,
+        utcStart: args.utcStart,
+        utcEnd: args.utcEnd,
+        ...(args.showDetails !== undefined ? { showDetails: args.showDetails } : {}),
+        ...(args.eventProperties ? { eventProperties: args.eventProperties } : {}),
+      },
+    );
+  }
+  return { accountId: account.accountId, list: responses };
 }

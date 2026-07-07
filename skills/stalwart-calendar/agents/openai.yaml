@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stalwart Calendar"
+  short_description: "Stalwart calendar scheduling workflows"
+  default_prompt: "Use $stalwart-calendar to inspect my Stalwart calendar and propose safe scheduling changes."
