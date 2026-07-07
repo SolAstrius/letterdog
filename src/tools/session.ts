@@ -15,7 +15,7 @@ export function registerSessionTools(server: McpServer, config: EnvConfig): void
     async (args, context) => {
       const session = await context.jmap.getSession(context.actor.auth);
       const apiAccount = args.includeApiAccount
-        ? await fetchApiAccount(config, context.actor.auth.bearer)
+        ? await fetchApiAccount(config, context.actor.auth.authorization)
         : undefined;
       return {
         baseUrl: config.stalwartBaseUrl,
@@ -51,9 +51,9 @@ export function registerSessionTools(server: McpServer, config: EnvConfig): void
   );
 }
 
-async function fetchApiAccount(config: EnvConfig, bearer: string): Promise<unknown> {
+async function fetchApiAccount(config: EnvConfig, authorization: string): Promise<unknown> {
   const response = await fetch(`${config.stalwartBaseUrl}/api/account`, {
-    headers: { Authorization: `Bearer ${bearer}` },
+    headers: { Authorization: authorization },
   });
   if (!response.ok) {
     throw new Error(`Management account lookup failed: HTTP ${response.status}`);

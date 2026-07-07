@@ -3,6 +3,7 @@ import { load } from "@std/dotenv";
 export interface EnvConfig {
   stalwartBaseUrl: string;
   fallbackBearer?: string;
+  fallbackAuthorization?: string;
   allowEnvBearerFallback: boolean;
   confirmationSecret: string;
   defaultAccountId?: string;
@@ -28,6 +29,8 @@ export async function loadConfig(): Promise<EnvConfig> {
   const transport = (Deno.env.get("MCP_TRANSPORT") ?? "http") === "stdio" ? "stdio" : "http";
   const fallbackBearer = Deno.env.get("STALWART_BEARER") || Deno.env.get("TEST_BEARER") ||
     undefined;
+  const fallbackAuthorization = Deno.env.get("STALWART_AUTHORIZATION") ||
+    (fallbackBearer ? `Bearer ${fallbackBearer}` : undefined);
   const allowEnvBearerFallback = (Deno.env.get("STALWART_ALLOW_ENV_BEARER_FALLBACK") ??
     (transport === "stdio" ? "true" : "false")) ===
     "true";
@@ -45,6 +48,7 @@ export async function loadConfig(): Promise<EnvConfig> {
   return {
     stalwartBaseUrl: trimSlash(stalwartBaseUrl),
     fallbackBearer,
+    fallbackAuthorization,
     allowEnvBearerFallback,
     confirmationSecret,
     defaultAccountId: Deno.env.get("STALWART_DEFAULT_ACCOUNT_ID") || undefined,

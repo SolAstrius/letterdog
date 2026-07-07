@@ -5,8 +5,8 @@ Stalwart APIs.
 
 The connector is JMAP-first:
 
-- JMAP is the primary structured API for calendars, events, principals, participant identities,
-  notifications, blobs, and files.
+- JMAP is the primary structured API for mail, mailboxes, identities, submissions, calendars,
+  events, principals, participant identities, notifications, blobs, and files.
 - CalDAV is used when the caller explicitly needs raw iCalendar source data, CalDAV discovery, or
   CalDAV resource metadata.
 - Stalwart `x:*` JMAP methods are used only for server/admin configuration, not normal user calendar
@@ -16,17 +16,20 @@ The connector is JMAP-first:
 
 ## Auth And Account Resolution
 
-Every tool runs as the caller represented by its bearer token. The HTTP MCP server must read:
+Every tool runs as the caller represented by its HTTP authorization value. The HTTP MCP server must
+read:
 
 ```text
 Authorization: Bearer <token>
 ```
 
-The server then resolves the live Stalwart session:
+Bearer is the normal deployed shape, but the authorization value is passed through unchanged so
+local or direct Stalwart Basic auth can be used for diagnostics. The server then resolves the live
+Stalwart session:
 
 ```text
 GET /jmap/session
-Authorization: Bearer <token>
+Authorization: <same value supplied to MCP>
 ```
 
 The session response supplies:
@@ -44,8 +47,8 @@ Tools must not hardcode account id `b`. They should resolve an account in this o
 3. Fall back to the first account advertising the required capability.
 4. Fail with a clear capability/account error if no account supports the tool.
 
-Bearer tokens must never be logged or persisted. Logs may include a stable token fingerprint derived
-with the confirmation secret, but never the raw token.
+Authorization values must never be logged or persisted. Logs may include a stable fingerprint
+derived with the confirmation secret, but never the raw credential.
 
 ## Session And Profile Tools
 
@@ -53,6 +56,42 @@ with the confirmation secret, but never the raw token.
 | -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `stalwart_session_info`    | `GET /jmap/session`, optional `GET /api/account` | Returns capabilities, account IDs, API/upload/download URLs, and optional edition/permissions summary. |
 | `stalwart_account_resolve` | `GET /jmap/session`                              | Resolves the account id that would be used for a requested capability.                                 |
+
+## Mail And Gmail-Like Tools
+
+The mail tools expose Gmail-like typed operations while using JMAP Mail, Submission, and Blob
+internally. Mailboxes are the default user-visible label model; keywords are used for flags and
+lightweight tags such as `$seen`, `$flagged`, `$draft`, `$Important`, and `$Forwarded`.
+
+| MCP Tool                     | Underlying Calls                                 | Notes                                                                                                                  |
+| ---------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `get_mail_profile`           | Session document, `Identity/get`                 | Returns username when present, account capability data, primary mail/submission accounts, and send identities.         |
+| `list_mailboxes`             | `Mailbox/get ids:null`                           | Lists mailboxes/labels, including roles and counts when requested.                                                     |
+| `search_email_ids`           | `Mailbox/get` as needed, `Email/query`           | Translates a known Gmail-query subset to JMAP filters and returns unsupported operators explicitly.                    |
+| `search_emails`              | `Email/query` -> `Email/get` with result refs    | Fetches matching messages in one JMAP batch.                                                                           |
+| `read_email`                 | `Email/get`, optional download URL               | Reads parsed email data; raw MIME is downloaded from the Email `blobId` when requested.                                |
+| `batch_read_emails`          | chunked `Email/get`                              | Reads explicit message ids in batches.                                                                                 |
+| `read_email_thread`          | `Email/get` if needed, `Thread/get`, `Email/get` | Reads a thread by message id or thread id.                                                                             |
+| `batch_read_email_threads`   | `Thread/get`, `Email/get`                        | Deduplicates message ids across threads before fetching.                                                               |
+| `read_attachment`            | `Email/get`, download URL                        | Verifies the requested blob/part belongs to the email, then returns base64 or text with byte limits.                   |
+| `create_draft_email`         | `Email/set create`                               | Creates a normal Email in Drafts with `$draft`; mutating, confirmation required.                                       |
+| `update_draft_email`         | `Email/get`, `Email/set create + destroy`        | Replaces draft content by creating a new draft and destroying the old draft; mutating, confirmation required.          |
+| `list_draft_emails`          | `Email/query`, `Email/get`                       | Searches `$draft` and the Drafts-role mailbox when available.                                                          |
+| `send_draft_email`           | `Identity/get`, `EmailSubmission/set`            | Sends an existing draft and moves it to Sent via `onSuccessUpdateEmail`; send confirmation required.                   |
+| `send_email`                 | `Email/set create`, `EmailSubmission/set`        | Creates a draft Email and submits it in one JMAP batch using back-references; send confirmation required.              |
+| `forward_emails`             | `Email/get`, `Email/set`, `EmailSubmission/set`  | Builds quoted or original-message-attached forwards and marks originals with `$Forwarded`; send confirmation required. |
+| `archive_emails`             | `Email/get`, `Email/set update`                  | Removes Inbox and optionally adds Archive. Never destroys mail.                                                        |
+| `delete_emails`              | `Email/set update` or `Email/set destroy`        | Trash is the default; permanent destroy requires `permanent: true` and confirmation.                                   |
+| `create_mail_label`          | `Mailbox/set create`                             | Creates a mailbox-backed label; mutating, confirmation required.                                                       |
+| `batch_modify_emails`        | `Email/set update` or `Email/set destroy`        | Adds/removes mailbox ids and keywords; can trash or permanently delete explicit ids.                                   |
+| `apply_mail_labels`          | `Email/set update`                               | Adds mailbox labels or keyword tags without removing existing mailbox membership.                                      |
+| `bulk_label_matching_emails` | `Email/query`, chunked `Email/set update`        | Collects matching ids before mutation. Defaults to `dry_run: true`; mutating calls require confirmation.               |
+
+Supported Gmail-style search mappings include `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `body:`,
+`text:`, `has:attachment`, `is:read`, `is:unread`, `is:starred`, `is:draft`, `is:important`,
+`is:answered`, `is:forwarded`, `in:`, `label:`, `after:`, `before:`, `larger:`, `smaller:`, and
+simple free text. Unsupported operators such as Gmail categories and filename search are returned in
+the `unsupported` array rather than silently treated as equivalent.
 
 ## Calendar Tools
 
@@ -198,6 +237,8 @@ The connector should expect and prefer these Stalwart/JMAP capabilities when ava
 | Capability                                     | Used For                                                       |
 | ---------------------------------------------- | -------------------------------------------------------------- |
 | `urn:ietf:params:jmap:core`                    | JMAP request/response framing and common types.                |
+| `urn:ietf:params:jmap:mail`                    | Email, Thread, and Mailbox search/read/mutation tools.         |
+| `urn:ietf:params:jmap:submission`              | Identity and EmailSubmission send workflows.                   |
 | `urn:ietf:params:jmap:calendars`               | Calendar, event, participant identity, and notification tools. |
 | `urn:ietf:params:jmap:calendars:parse`         | iCalendar parsing through `CalendarEvent/parse`.               |
 | `urn:ietf:params:jmap:principals`              | Principal search and reads.                                    |

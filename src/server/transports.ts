@@ -2,7 +2,7 @@ import { McpServer } from "@mcp/server/mcp";
 import { StdioServerTransport } from "@mcp/server/stdio";
 import { WebStandardStreamableHTTPServerTransport } from "@mcp/server/web-standard-streamable-http";
 import type { EnvConfig } from "../config.ts";
-import { authInfoFromRequest, parseBearerHeader } from "../auth.ts";
+import { authInfoFromRequest, parseAuthorizationHeader } from "../auth.ts";
 import { registerAllTools } from "../tools/index.ts";
 
 function createServer(config: EnvConfig): McpServer {
@@ -26,12 +26,14 @@ export function startHttp(config: EnvConfig): void {
       });
     }
     if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 });
-    if (!parseBearerHeader(request.headers.get("authorization"))) {
+    if (!parseAuthorizationHeader(request.headers.get("authorization"))) {
       return Response.json(
-        { error: "Missing bearer token. Send Authorization: Bearer <token>." },
+        { error: "Missing Authorization header." },
         {
           status: 401,
-          headers: { "WWW-Authenticate": 'Bearer realm="stalwart-jmap-mcp"' },
+          headers: {
+            "WWW-Authenticate": 'Bearer realm="stalwart-jmap-mcp", Basic realm="stalwart-jmap-mcp"',
+          },
         },
       );
     }

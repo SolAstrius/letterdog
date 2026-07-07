@@ -3,6 +3,7 @@ import type { EnvConfig } from "../config.ts";
 import { registerAdminTools } from "./admin.ts";
 import { registerCalendarTools } from "./calendar.ts";
 import { registerCalDavTools } from "./caldav.ts";
+import { registerMailTools } from "./mail.ts";
 import { registerNotificationTools } from "./notifications.ts";
 import { registerPrincipalTools } from "./principal.ts";
 import { registerRawTools } from "./raw.ts";
@@ -10,6 +11,7 @@ import { registerSessionTools } from "./session.ts";
 
 export function registerAllTools(server: McpServer, config: EnvConfig): void {
   registerSessionTools(server, config);
+  registerMailTools(server, config);
   registerCalendarTools(server, config);
   registerPrincipalTools(server, config);
   registerNotificationTools(server, config);

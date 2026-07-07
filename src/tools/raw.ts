@@ -158,7 +158,7 @@ export function registerRawTools(server: McpServer, config: EnvConfig): void {
       const response = await fetch(uploadUrl, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${account.auth.bearer}`,
+          Authorization: account.auth.authorization,
           "Content-Type": args.content_type ?? "application/octet-stream",
           ...(args.filename
             ? { "Content-Disposition": `attachment; filename="${args.filename}"` }
@@ -295,5 +295,6 @@ function buildUrl(
   return template
     .replaceAll("{accountId}", encodeURIComponent(accountId))
     .replaceAll("{blobId}", encodeURIComponent(blobId ?? ""))
-    .replaceAll("{name}", encodeURIComponent(blobId ?? "blob"));
+    .replaceAll("{name}", encodeURIComponent(blobId ?? "blob"))
+    .replaceAll("{type}", encodeURIComponent("application/octet-stream"));
 }

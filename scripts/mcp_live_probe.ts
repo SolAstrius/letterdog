@@ -19,13 +19,17 @@ await main();
 async function main(): Promise<void> {
   await load({ export: true });
   const endpoint = Deno.env.get("MCP_ENDPOINT") ?? "http://127.0.0.1:8787/mcp";
+  const authorization = Deno.env.get("MCP_AUTHORIZATION");
   const bearer = Deno.env.get("MCP_BEARER") ?? Deno.env.get("TEST_BEARER") ??
     Deno.env.get("STALWART_BEARER");
-  if (!bearer) throw new Error("Set MCP_BEARER, TEST_BEARER, or STALWART_BEARER");
+  const authHeader = authorization ?? (bearer ? `Bearer ${bearer}` : undefined);
+  if (!authHeader) {
+    throw new Error("Set MCP_AUTHORIZATION, MCP_BEARER, TEST_BEARER, or STALWART_BEARER");
+  }
 
   const client = new Client({ name: "stalwart-jmap-mcp-live-probe", version: "0.1.0" });
   const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
-    requestInit: { headers: { Authorization: `Bearer ${bearer}` } },
+    requestInit: { headers: { Authorization: authHeader } },
   });
   await client.connect(transport);
   const results: ProbeResult[] = [];
@@ -40,6 +44,73 @@ async function main(): Promise<void> {
     });
 
     const session = await probe(results, client, "stalwart_session_info", {});
+    await probe(results, client, "stalwart_account_resolve", {
+      capability: "urn:ietf:params:jmap:mail",
+    });
+    await probe(results, client, "stalwart_account_resolve", {
+      capability: "urn:ietf:params:jmap:submission",
+    });
+    await probe(results, client, "get_mail_profile", {});
+    const mailboxes = await probe(results, client, "list_mailboxes", {});
+    const mailboxList = arrayAt(mailboxes, "list");
+    const junkMailboxId = mailboxIdByRole(mailboxList, "junk");
+    const inboxMailboxId = mailboxIdByRole(mailboxList, "inbox");
+    const mailSearch = await probe(results, client, "search_email_ids", {
+      query: junkMailboxId ? "in:junk" : undefined,
+      limit: 5,
+      sort: [{ property: "receivedAt", isAscending: false }],
+      calculate_total: true,
+    });
+    const mailIds = arrayAt(objectAt(mailSearch, "query"), "ids").map(String);
+    const fetchedMail = await probe(results, client, "search_emails", {
+      filter: inboxMailboxId ? { inMailbox: inboxMailboxId } : undefined,
+      limit: 3,
+      include_body: false,
+      sort: [{ property: "receivedAt", isAscending: false }],
+    });
+    const fetchedMailList = arrayAt(objectAt(fetchedMail, "get"), "list");
+    const firstEmailId = mailIds[0] ?? stringAt(fetchedMailList[0], "id");
+    if (firstEmailId) {
+      const email = await probe(results, client, "read_email", {
+        email_id: firstEmailId,
+        include_body: true,
+        max_body_bytes: 20_000,
+      });
+      await probe(results, client, "batch_read_emails", {
+        email_ids: [firstEmailId],
+        include_body: false,
+      });
+      await probe(results, client, "read_email_thread", {
+        email_id: firstEmailId,
+        include_body: false,
+      });
+      const threadId = stringAt(firstObject(arrayAt(objectAt(email, "get"), "list")), "threadId");
+      if (threadId) {
+        await probe(results, client, "batch_read_email_threads", {
+          thread_ids: [threadId],
+          include_body: false,
+        });
+      }
+      const attachmentBlobId = firstAttachmentBlobId(
+        firstObject(arrayAt(objectAt(email, "get"), "list")),
+      );
+      if (attachmentBlobId) {
+        await probe(results, client, "read_attachment", {
+          email_id: firstEmailId,
+          blob_id: attachmentBlobId,
+          as: "base64",
+          max_bytes: 2048,
+        });
+      }
+    }
+    await probe(results, client, "list_draft_emails", { limit: 5, include_body: false });
+    await probe(results, client, "create_draft_email", {
+      message: {
+        to: [{ email: "nobody@example.invalid" }],
+        subject: "Probe draft confirmation",
+        body: { text: "This probe must return a confirmation challenge, not create a draft." },
+      },
+    });
     await probe(results, client, "stalwart_account_resolve", {
       capability: "urn:ietf:params:jmap:calendars",
     });
@@ -270,6 +341,30 @@ function stringAt(value: unknown, key: string): string | undefined {
 function booleanAt(value: unknown, key: string): boolean {
   if (!value || typeof value !== "object") return false;
   return (value as Record<string, unknown>)[key] === true;
+}
+
+function firstObject(value: unknown[]): Record<string, unknown> {
+  const first = value[0];
+  return first && typeof first === "object" && !Array.isArray(first)
+    ? first as Record<string, unknown>
+    : {};
+}
+
+function mailboxIdByRole(mailboxes: unknown[], role: string): string | undefined {
+  for (const mailbox of mailboxes) {
+    if (!mailbox || typeof mailbox !== "object" || Array.isArray(mailbox)) continue;
+    const record = mailbox as Record<string, unknown>;
+    if (record.role === role && typeof record.id === "string") return record.id;
+  }
+  return undefined;
+}
+
+function firstAttachmentBlobId(email: Record<string, unknown>): string | undefined {
+  for (const part of arrayAt(email, "attachments")) {
+    const blobId = stringAt(part, "blobId");
+    if (blobId) return blobId;
+  }
+  return undefined;
 }
 
 function firstCalendarPath(value: unknown): string | undefined {

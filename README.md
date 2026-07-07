@@ -2,9 +2,10 @@
 
 Deno MCP server for Stalwart's JMAP, CalDAV, and Stalwart management surfaces.
 
-The server is stateless. In HTTP mode, every MCP request supplies a bearer token in
-`Authorization: Bearer ...`; that bearer is forwarded to Stalwart and used to resolve the live JMAP
-session and account capabilities. `.env` bearer fallback is for local development and stdio only.
+The server is stateless. In HTTP mode, every MCP request supplies an `Authorization` header, usually
+`Authorization: Bearer ...`; that authorization value is forwarded to Stalwart and used to resolve
+the live JMAP session and account capabilities. `.env` authorization fallback is for local
+development and stdio only.
 
 CalDAV discovery, collection listing, calendar-query, and multiget use `@nextcloud/cdav-library`,
 with a Deno XML DOM/XPath shim and raw fetch fallbacks for GET/PUT/DELETE iCalendar resources.

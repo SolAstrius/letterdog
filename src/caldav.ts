@@ -107,7 +107,7 @@ export class CalDavClient {
     path: string,
   ): Promise<{ contentType: string | null; etag: string | null; body: string }> {
     const response = await fetch(this.urlForPath(path), {
-      headers: { Authorization: `Bearer ${this.auth.bearer}` },
+      headers: { Authorization: this.auth.authorization },
     });
     if (!response.ok) throw new Error(`CalDAV GET failed: HTTP ${response.status}`);
     return {
@@ -123,7 +123,7 @@ export class CalDavClient {
     options: { contentType?: string; ifMatch?: string; ifNoneMatch?: "*" } = {},
   ): Promise<{ status: number; etag: string | null; location: string | null }> {
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.auth.bearer}`,
+      Authorization: this.auth.authorization,
       "Content-Type": options.contentType ?? "text/calendar; charset=utf-8",
     };
     if (options.ifMatch) headers["If-Match"] = options.ifMatch;
@@ -143,7 +143,7 @@ export class CalDavClient {
 
   async delete(path: string, ifMatch?: string): Promise<{ status: number }> {
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.auth.bearer}`,
+      Authorization: this.auth.authorization,
     };
     if (ifMatch) headers["If-Match"] = ifMatch;
     const response = await fetch(this.urlForPath(path), {
@@ -163,7 +163,7 @@ export class CalDavClient {
     const response = await fetch(this.urlForPath(path), {
       method,
       headers: {
-        Authorization: `Bearer ${this.auth.bearer}`,
+        Authorization: this.auth.authorization,
         Depth: depth,
         "Content-Type": "application/xml; charset=utf-8",
       },
@@ -180,7 +180,7 @@ export class CalDavClient {
     const { default: DavClient } = await import("@nextcloud/cdav-library");
     const client = new DavClient({
       rootUrl: this.rootUrl(),
-      defaultHeaders: { Authorization: `Bearer ${this.auth.bearer}` },
+      defaultHeaders: { Authorization: this.auth.authorization },
     });
     return await client.connect({ enableCalDAV: true });
   }

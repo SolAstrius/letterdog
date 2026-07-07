@@ -3,7 +3,8 @@ import type { ServerNotification, ServerRequest } from "@mcp/types";
 import type { EnvConfig } from "./config.ts";
 
 export interface RequestAuth {
-  bearer: string;
+  authorization: string;
+  bearer?: string;
   source: "http-authorization" | "env-fallback";
 }
 
@@ -16,13 +17,19 @@ export interface ActorContext {
 export type ToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
 export function authInfoFromRequest(request: Request) {
-  const bearer = parseBearerHeader(request.headers.get("authorization"));
-  if (!bearer) return undefined;
+  const authorization = parseAuthorizationHeader(request.headers.get("authorization"));
+  if (!authorization) return undefined;
   return {
-    token: bearer,
-    clientId: "bearer-pass-through",
+    token: parseBearerHeader(authorization) ?? authorization,
+    clientId: "authorization-pass-through",
     scopes: [],
   };
+}
+
+export function parseAuthorizationHeader(header: string | null): string | undefined {
+  if (!header) return undefined;
+  const trimmed = header.trim();
+  return /^[A-Za-z][A-Za-z0-9+.-]*\s+.+$/.test(trimmed) ? trimmed : undefined;
 }
 
 export function parseBearerHeader(header: string | null): string | undefined {
@@ -35,26 +42,42 @@ export async function buildActorContext(
   config: EnvConfig,
   extra: ToolExtra,
 ): Promise<ActorContext> {
-  const bearer = extra.authInfo?.token ||
-    parseBearerHeader(headerFromExtra(extra, "authorization"));
+  const authorization = parseAuthorizationHeader(headerFromExtra(extra, "authorization")) ??
+    authorizationFromAuthInfo(extra.authInfo?.token);
 
-  if (bearer) {
+  if (authorization) {
     return {
-      auth: { bearer, source: "http-authorization" },
+      auth: {
+        authorization,
+        bearer: parseBearerHeader(authorization),
+        source: "http-authorization",
+      },
       requestId: String(extra.requestId),
-      actorFingerprint: await tokenFingerprint(config.confirmationSecret, bearer),
+      actorFingerprint: await tokenFingerprint(config.confirmationSecret, authorization),
     };
   }
 
-  if (config.allowEnvBearerFallback && config.fallbackBearer) {
+  if (config.allowEnvBearerFallback && config.fallbackAuthorization) {
     return {
-      auth: { bearer: config.fallbackBearer, source: "env-fallback" },
+      auth: {
+        authorization: config.fallbackAuthorization,
+        bearer: parseBearerHeader(config.fallbackAuthorization),
+        source: "env-fallback",
+      },
       requestId: String(extra.requestId),
-      actorFingerprint: await tokenFingerprint(config.confirmationSecret, config.fallbackBearer),
+      actorFingerprint: await tokenFingerprint(
+        config.confirmationSecret,
+        config.fallbackAuthorization,
+      ),
     };
   }
 
-  throw new Error("Missing bearer token. Send Authorization: Bearer <token>.");
+  throw new Error("Missing Authorization header.");
+}
+
+function authorizationFromAuthInfo(token: string | undefined): string | undefined {
+  if (!token) return undefined;
+  return parseAuthorizationHeader(token) ?? `Bearer ${token}`;
 }
 
 function headerFromExtra(extra: ToolExtra, name: string): string | null {

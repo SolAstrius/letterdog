@@ -43,7 +43,7 @@ export class JmapClient {
 
   async getSession(auth: ActorContext["auth"]): Promise<JmapSession> {
     const response = await fetch(`${this.config.stalwartBaseUrl}/jmap/session`, {
-      headers: { Authorization: `Bearer ${auth.bearer}` },
+      headers: { Authorization: auth.authorization },
     });
     if (!response.ok) {
       throw new Error(`JMAP session failed: HTTP ${response.status}`);
@@ -86,7 +86,7 @@ export class JmapClient {
     const response = await fetch(context.apiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${context.auth.bearer}`,
+        Authorization: context.auth.authorization,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(invocation),
@@ -126,6 +126,13 @@ function firstAccountWithCapability(session: JmapSession, capability?: string): 
 }
 
 export const CALENDAR_USING = [CAPABILITIES.core, CAPABILITIES.calendars];
+export const MAIL_USING = [CAPABILITIES.core, CAPABILITIES.mail];
+export const MAIL_BLOB_USING = [CAPABILITIES.core, CAPABILITIES.mail, CAPABILITIES.blob];
+export const SUBMISSION_USING = [
+  CAPABILITIES.core,
+  CAPABILITIES.mail,
+  CAPABILITIES.submission,
+];
 export const CALENDAR_PARSE_USING = [
   CAPABILITIES.core,
   CAPABILITIES.calendars,
