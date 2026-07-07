@@ -1,0 +1,10 @@
+{
+  "generatedAt": "2026-07-07T14:58:44.805Z",
+  "baseUrl": "https://mail.astrius.ink",
+  "files": [
+    "jmap-session.json",
+    "jmap-capabilities.json",
+    "api-account.json",
+    "stalwart-config-schema.json"
+  ]
+}

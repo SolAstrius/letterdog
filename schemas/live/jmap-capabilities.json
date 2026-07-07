@@ -1,0 +1,57 @@
+{
+  "capabilities": [
+    "urn:ietf:params:jmap:blob",
+    "urn:ietf:params:jmap:calendars",
+    "urn:ietf:params:jmap:calendars:parse",
+    "urn:ietf:params:jmap:contacts",
+    "urn:ietf:params:jmap:contacts:parse",
+    "urn:ietf:params:jmap:core",
+    "urn:ietf:params:jmap:filenode",
+    "urn:ietf:params:jmap:mail",
+    "urn:ietf:params:jmap:principals",
+    "urn:ietf:params:jmap:principals:availability",
+    "urn:ietf:params:jmap:quota",
+    "urn:ietf:params:jmap:sieve",
+    "urn:ietf:params:jmap:submission",
+    "urn:ietf:params:jmap:vacationresponse",
+    "urn:ietf:params:jmap:websocket"
+  ],
+  "primaryAccounts": {
+    "urn:ietf:params:jmap:mail": "b",
+    "urn:ietf:params:jmap:submission": "b",
+    "urn:ietf:params:jmap:vacationresponse": "b",
+    "urn:ietf:params:jmap:contacts": "b",
+    "urn:ietf:params:jmap:contacts:parse": "b",
+    "urn:ietf:params:jmap:calendars": "b",
+    "urn:ietf:params:jmap:calendars:parse": "b",
+    "urn:ietf:params:jmap:websocket": "b",
+    "urn:ietf:params:jmap:sieve": "b",
+    "urn:ietf:params:jmap:blob": "b",
+    "urn:ietf:params:jmap:quota": "b",
+    "urn:ietf:params:jmap:principals": "b",
+    "urn:ietf:params:jmap:principals:availability": "b",
+    "urn:ietf:params:jmap:filenode": "b",
+    "urn:ietf:params:jmap:mail:share": "b",
+    "urn:stalwart:jmap": "b"
+  },
+  "accounts": {
+    "b": [
+      "urn:ietf:params:jmap:blob",
+      "urn:ietf:params:jmap:calendars",
+      "urn:ietf:params:jmap:calendars:parse",
+      "urn:ietf:params:jmap:contacts",
+      "urn:ietf:params:jmap:contacts:parse",
+      "urn:ietf:params:jmap:filenode",
+      "urn:ietf:params:jmap:mail",
+      "urn:ietf:params:jmap:mail:share",
+      "urn:ietf:params:jmap:principals",
+      "urn:ietf:params:jmap:principals:availability",
+      "urn:ietf:params:jmap:quota",
+      "urn:ietf:params:jmap:sieve",
+      "urn:ietf:params:jmap:submission",
+      "urn:ietf:params:jmap:vacationresponse",
+      "urn:ietf:params:jmap:websocket",
+      "urn:stalwart:jmap"
+    ]
+  }
+}
