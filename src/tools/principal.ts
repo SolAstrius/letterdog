@@ -211,18 +211,6 @@ function registerParticipantIdentityTools(server: McpServer, config: EnvConfig):
       );
       const create = { [args.create_id ?? "new"]: args.identity };
       const payload = setArgs(account.accountId, { create, ifInState: args.if_in_state });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "participant_identity_create",
-        accountId: account.accountId,
-        operation: "create",
-        resourceKind: "ParticipantIdentity",
-        resourceIds: Object.keys(create),
-        payload,
-        summary: "Create a participant identity.",
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(
         account,
         PRINCIPAL_USING,
@@ -252,18 +240,6 @@ function registerParticipantIdentityTools(server: McpServer, config: EnvConfig):
         update: { [args.identity_id]: args.patch },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "participant_identity_update",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "ParticipantIdentity",
-        resourceIds: [args.identity_id],
-        payload,
-        summary: `Update participant identity ${args.identity_id}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(
         account,
         PRINCIPAL_USING,
@@ -332,18 +308,6 @@ function registerParticipantIdentityTools(server: McpServer, config: EnvConfig):
         extra: { onSuccessSetDefaultIdentity: args.identity_id },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "participant_identity_set_default",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "ParticipantIdentity",
-        resourceIds: [args.identity_id],
-        payload,
-        summary: `Set participant identity ${args.identity_id} as default.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(
         account,
         PRINCIPAL_USING,

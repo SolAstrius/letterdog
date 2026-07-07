@@ -138,8 +138,10 @@ operation and the query has been checked.
 
 ## Mutation Confirmation
 
-Mutating tools may return a preview with `confirmationRequired`, `confirmFingerprint`, and
-`expiresAt` instead of executing. Present the summary and relevant target ids. When the user
+Draft create/update, mail-label creation, explicit-id archive, and explicit-id label application
+execute directly. Sending mail, forwarding, trash/permanent delete, mailbox removals, and
+query-powered bulk mutations may return a preview with `confirmationRequired`, `confirmFingerprint`,
+and `expiresAt` instead of executing. Present the summary and relevant target ids. When the user
 confirms, call the same tool again with the same arguments plus `confirmFingerprint` and
 `confirmExpiresAt` set to the returned `expiresAt`.
 

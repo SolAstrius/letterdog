@@ -119,18 +119,6 @@ export function registerRawTools(server: McpServer, config: EnvConfig): void {
         fromAccountId: args.from_account_id ?? account.accountId,
         blobIds: args.blob_ids,
       };
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "blob_copy",
-        accountId: account.accountId,
-        operation: "create",
-        resourceKind: "Blob",
-        resourceIds: args.blob_ids,
-        payload,
-        summary: `Copy ${args.blob_ids.length} blob(s).`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, BLOB_USING, "Blob/copy", payload);
     },
   );

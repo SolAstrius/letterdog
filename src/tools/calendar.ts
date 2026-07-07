@@ -113,19 +113,6 @@ export function registerCalendarTools(server: McpServer, config: EnvConfig): voi
       );
       const create = { [args.create_id ?? "new"]: args.calendar };
       const payload = setArgs(account.accountId, { create, ifInState: args.if_in_state });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "calendar_create",
-        accountId: account.accountId,
-        operation: "create",
-        resourceKind: "Calendar",
-        resourceIds: Object.keys(create),
-        payload,
-        precondition: args.if_in_state ? { ifInState: args.if_in_state } : undefined,
-        summary: "Create a calendar.",
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, CALENDAR_USING, "Calendar/set", payload);
     },
   );
@@ -150,19 +137,6 @@ export function registerCalendarTools(server: McpServer, config: EnvConfig): voi
         update: { [args.calendar_id]: args.patch },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "calendar_update",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "Calendar",
-        resourceIds: [args.calendar_id],
-        payload,
-        precondition: args.if_in_state ? { ifInState: args.if_in_state } : undefined,
-        summary: `Update calendar ${args.calendar_id}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, CALENDAR_USING, "Calendar/set", payload);
     },
   );
@@ -222,18 +196,6 @@ export function registerCalendarTools(server: McpServer, config: EnvConfig): voi
         extra: { onSuccessSetDefaultCalendar: args.calendar_id },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "calendar_set_default",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "Calendar",
-        resourceIds: [args.calendar_id],
-        payload,
-        summary: `Set calendar ${args.calendar_id} as default.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, CALENDAR_USING, "Calendar/set", payload);
     },
   );
@@ -262,18 +224,6 @@ export function registerCalendarTools(server: McpServer, config: EnvConfig): voi
         update: { [args.calendar_id]: patch },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "calendar_subscribe",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "Calendar",
-        resourceIds: [args.calendar_id],
-        payload,
-        summary: `Update subscription flags for calendar ${args.calendar_id}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, CALENDAR_USING, "Calendar/set", payload);
     },
   );
@@ -539,19 +489,21 @@ function registerEventTools(server: McpServer, config: EnvConfig): void {
           ...(args.update_scope ? { updateScope: args.update_scope } : {}),
         },
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "calendar_event_update",
-        accountId: account.accountId,
-        operation: args.sendSchedulingMessages ? "send" : "update",
-        resourceKind: "CalendarEvent",
-        resourceIds: [args.event_id],
-        payload,
-        precondition: args.if_in_state ? { ifInState: args.if_in_state } : undefined,
-        summary: `Update event ${args.event_id}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
+      if (requiresEventUpdateConfirmation(args.sendSchedulingMessages, args.update_scope)) {
+        const guard = await requireMutationConfirmation(context, {
+          toolName: "calendar_event_update",
+          accountId: account.accountId,
+          operation: args.sendSchedulingMessages ? "send" : "update",
+          resourceKind: "CalendarEvent",
+          resourceIds: [args.event_id],
+          payload,
+          precondition: args.if_in_state ? { ifInState: args.if_in_state } : undefined,
+          summary: `Update event ${args.event_id}.`,
+          confirmFingerprint: args.confirmFingerprint,
+          confirmExpiresAt: args.confirmExpiresAt,
+        });
+        if (guard) return guard;
+      }
       return await context.jmap.single(account, CALENDAR_USING, "CalendarEvent/set", payload);
     },
   );
@@ -633,18 +585,6 @@ function registerEventTools(server: McpServer, config: EnvConfig): void {
         ...(args.if_in_state ? { ifInState: args.if_in_state } : {}),
       };
       delete (payload as Record<string, unknown>).blobIds;
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "calendar_event_copy",
-        accountId: destAccountId,
-        operation: "create",
-        resourceKind: "CalendarEvent",
-        resourceIds: [args.event_id],
-        payload,
-        summary: `Copy event ${args.event_id}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(source, CALENDAR_USING, "CalendarEvent/copy", payload);
     },
   );
@@ -832,6 +772,13 @@ function asIds(value: unknown): string[] {
 
 function schedulingExtra(sendSchedulingMessages?: boolean): Record<string, unknown> {
   return sendSchedulingMessages === undefined ? {} : { sendSchedulingMessages };
+}
+
+export function requiresEventUpdateConfirmation(
+  sendSchedulingMessages?: boolean,
+  updateScope?: "this" | "future" | "all",
+): boolean {
+  return sendSchedulingMessages === true || updateScope === "future" || updateScope === "all";
 }
 
 function compactFilter(filter: Record<string, unknown>): Record<string, unknown> | undefined {

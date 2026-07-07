@@ -63,29 +63,29 @@ The mail tools expose Gmail-like typed operations while using JMAP Mail, Submiss
 internally. Mailboxes are the default user-visible label model; keywords are used for flags and
 lightweight tags such as `$seen`, `$flagged`, `$draft`, `$Important`, and `$Forwarded`.
 
-| MCP Tool                     | Underlying Calls                                 | Notes                                                                                                                  |
-| ---------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `get_mail_profile`           | Session document, `Identity/get`                 | Returns username when present, account capability data, primary mail/submission accounts, and send identities.         |
-| `list_mailboxes`             | `Mailbox/get ids:null`                           | Lists mailboxes/labels, including roles and counts when requested.                                                     |
-| `search_email_ids`           | `Mailbox/get` as needed, `Email/query`           | Translates a known Gmail-query subset to JMAP filters and returns unsupported operators explicitly.                    |
-| `search_emails`              | `Email/query` -> `Email/get` with result refs    | Fetches matching messages in one JMAP batch.                                                                           |
-| `read_email`                 | `Email/get`, optional download URL               | Reads parsed email data; raw MIME is downloaded from the Email `blobId` when requested.                                |
-| `batch_read_emails`          | chunked `Email/get`                              | Reads explicit message ids in batches.                                                                                 |
-| `read_email_thread`          | `Email/get` if needed, `Thread/get`, `Email/get` | Reads a thread by message id or thread id.                                                                             |
-| `batch_read_email_threads`   | `Thread/get`, `Email/get`                        | Deduplicates message ids across threads before fetching.                                                               |
-| `read_attachment`            | `Email/get`, download URL                        | Verifies the requested blob/part belongs to the email, then returns base64 or text with byte limits.                   |
-| `create_draft_email`         | `Email/set create`                               | Creates a normal Email in Drafts with `$draft`; mutating, confirmation required.                                       |
-| `update_draft_email`         | `Email/get`, `Email/set create + destroy`        | Replaces draft content by creating a new draft and destroying the old draft; mutating, confirmation required.          |
-| `list_draft_emails`          | `Email/query`, `Email/get`                       | Searches `$draft` and the Drafts-role mailbox when available.                                                          |
-| `send_draft_email`           | `Identity/get`, `EmailSubmission/set`            | Sends an existing draft and moves it to Sent via `onSuccessUpdateEmail`; send confirmation required.                   |
-| `send_email`                 | `Email/set create`, `EmailSubmission/set`        | Creates a draft Email and submits it in one JMAP batch using back-references; send confirmation required.              |
-| `forward_emails`             | `Email/get`, `Email/set`, `EmailSubmission/set`  | Builds quoted or original-message-attached forwards and marks originals with `$Forwarded`; send confirmation required. |
-| `archive_emails`             | `Email/get`, `Email/set update`                  | Removes Inbox and optionally adds Archive. Never destroys mail.                                                        |
-| `delete_emails`              | `Email/set update` or `Email/set destroy`        | Trash is the default; permanent destroy requires `permanent: true` and confirmation.                                   |
-| `create_mail_label`          | `Mailbox/set create`                             | Creates a mailbox-backed label; mutating, confirmation required.                                                       |
-| `batch_modify_emails`        | `Email/set update` or `Email/set destroy`        | Adds/removes mailbox ids and keywords; can trash or permanently delete explicit ids.                                   |
-| `apply_mail_labels`          | `Email/set update`                               | Adds mailbox labels or keyword tags without removing existing mailbox membership.                                      |
-| `bulk_label_matching_emails` | `Email/query`, chunked `Email/set update`        | Collects matching ids before mutation. Defaults to `dry_run: true`; mutating calls require confirmation.               |
+| MCP Tool                     | Underlying Calls                                 | Notes                                                                                                                      |
+| ---------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `get_mail_profile`           | Session document, `Identity/get`                 | Returns username when present, account capability data, primary mail/submission accounts, and send identities.             |
+| `list_mailboxes`             | `Mailbox/get ids:null`                           | Lists mailboxes/labels, including roles and counts when requested.                                                         |
+| `search_email_ids`           | `Mailbox/get` as needed, `Email/query`           | Translates a known Gmail-query subset to JMAP filters and returns unsupported operators explicitly.                        |
+| `search_emails`              | `Email/query` -> `Email/get` with result refs    | Fetches matching messages in one JMAP batch.                                                                               |
+| `read_email`                 | `Email/get`, optional download URL               | Reads parsed email data; raw MIME is downloaded from the Email `blobId` when requested.                                    |
+| `batch_read_emails`          | chunked `Email/get`                              | Reads explicit message ids in batches.                                                                                     |
+| `read_email_thread`          | `Email/get` if needed, `Thread/get`, `Email/get` | Reads a thread by message id or thread id.                                                                                 |
+| `batch_read_email_threads`   | `Thread/get`, `Email/get`                        | Deduplicates message ids across threads before fetching.                                                                   |
+| `read_attachment`            | `Email/get`, download URL                        | Verifies the requested blob/part belongs to the email, then returns base64 or text with byte limits.                       |
+| `create_draft_email`         | `Email/set create`                               | Creates a normal Email in Drafts with `$draft`; executes directly because it does not send mail.                           |
+| `update_draft_email`         | `Email/get`, `Email/set create + destroy`        | Replaces draft content by creating a new draft and destroying the old draft; executes directly because it remains a draft. |
+| `list_draft_emails`          | `Email/query`, `Email/get`                       | Searches `$draft` and the Drafts-role mailbox when available.                                                              |
+| `send_draft_email`           | `Identity/get`, `EmailSubmission/set`            | Sends an existing draft and moves it to Sent via `onSuccessUpdateEmail`; send confirmation required.                       |
+| `send_email`                 | `Email/set create`, `EmailSubmission/set`        | Creates a draft Email and submits it in one JMAP batch using back-references; send confirmation required.                  |
+| `forward_emails`             | `Email/get`, `Email/set`, `EmailSubmission/set`  | Builds quoted or original-message-attached forwards and marks originals with `$Forwarded`; send confirmation required.     |
+| `archive_emails`             | `Email/get`, `Email/set update`                  | Removes Inbox and optionally adds Archive. Never destroys mail, so explicit-id archives execute directly.                  |
+| `delete_emails`              | `Email/set update` or `Email/set destroy`        | Trash is the default; permanent destroy requires `permanent: true` and confirmation.                                       |
+| `create_mail_label`          | `Mailbox/set create`                             | Creates a mailbox-backed label; executes directly.                                                                         |
+| `batch_modify_emails`        | `Email/set update` or `Email/set destroy`        | Additive keyword/mailbox changes execute directly; trash, permanent delete, and mailbox removals require confirmation.     |
+| `apply_mail_labels`          | `Email/set update`                               | Adds mailbox labels or keyword tags without removing existing mailbox membership; executes directly for explicit ids.      |
+| `bulk_label_matching_emails` | `Email/query`, chunked `Email/set update`        | Collects matching ids before mutation. Defaults to `dry_run: true`; mutating calls require confirmation.                   |
 
 Supported Gmail-style search mappings include `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `body:`,
 `text:`, `has:attachment`, `is:read`, `is:unread`, `is:starred`, `is:draft`, `is:important`,
@@ -95,17 +95,17 @@ the `unsupported` array rather than silently treated as equivalent.
 
 ## Calendar Tools
 
-| MCP Tool               | Underlying Calls                             | Notes                                                                                                                                                                                                    |
-| ---------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `calendar_list`        | `Calendar/query` -> `Calendar/get`           | Lists calendars visible to the account. Include `isSubscribed`, `isVisible`, `includeInAvailability`, `shareWith`, and `myRights` when available.                                                        |
-| `calendar_get`         | `Calendar/get`                               | Reads one or more calendars by id.                                                                                                                                                                       |
-| `calendar_create`      | `Calendar/set create`                        | Creates a calendar. Mutating; confirmation required.                                                                                                                                                     |
-| `calendar_update`      | `Calendar/set update`                        | Updates mutable calendar fields such as `name`, `description`, `color`, `timeZone`, `sortOrder`, `isVisible`, and `includeInAvailability`. Mutating; confirmation required for non-display-only changes. |
-| `calendar_delete`      | `Calendar/set destroy`                       | Deletes a calendar. Destructive; confirmation required. If events would be destroyed, require an explicit `destroy_events` style argument.                                                               |
-| `calendar_set_default` | `Calendar/set` with default-calendar option  | Sets the default calendar for the account. Mutating; confirmation required.                                                                                                                              |
-| `calendar_subscribe`   | `Calendar/set update isSubscribed/isVisible` | Subscribes, unsubscribes, shows, or hides a calendar for the current user. Mutating; confirmation required when unsubscribing.                                                                           |
-| `calendar_share`       | `Calendar/set update shareWith`              | Updates calendar sharing ACLs. Mutating and potentially broad; confirmation required.                                                                                                                    |
-| `calendar_changes`     | `Calendar/changes`                           | Sync primitive for calendar collection changes since a known state.                                                                                                                                      |
+| MCP Tool               | Underlying Calls                             | Notes                                                                                                                                                                                               |
+| ---------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `calendar_list`        | `Calendar/query` -> `Calendar/get`           | Lists calendars visible to the account. Include `isSubscribed`, `isVisible`, `includeInAvailability`, `shareWith`, and `myRights` when available.                                                   |
+| `calendar_get`         | `Calendar/get`                               | Reads one or more calendars by id.                                                                                                                                                                  |
+| `calendar_create`      | `Calendar/set create`                        | Creates a calendar. Executes directly.                                                                                                                                                              |
+| `calendar_update`      | `Calendar/set update`                        | Updates mutable calendar fields such as `name`, `description`, `color`, `timeZone`, `sortOrder`, `isVisible`, and `includeInAvailability`. Executes directly unless using a broader raw/admin path. |
+| `calendar_delete`      | `Calendar/set destroy`                       | Deletes a calendar. Destructive; confirmation required. If events would be destroyed, require an explicit `destroy_events` style argument.                                                          |
+| `calendar_set_default` | `Calendar/set` with default-calendar option  | Sets the default calendar for the account. Executes directly.                                                                                                                                       |
+| `calendar_subscribe`   | `Calendar/set update isSubscribed/isVisible` | Subscribes, unsubscribes, shows, or hides a calendar for the current user. Executes directly.                                                                                                       |
+| `calendar_share`       | `Calendar/set update shareWith`              | Updates calendar sharing ACLs. Mutating and potentially broad; confirmation required.                                                                                                               |
+| `calendar_changes`     | `Calendar/changes`                           | Sync primitive for calendar collection changes since a known state.                                                                                                                                 |
 
 ## Event Tools
 
@@ -116,9 +116,9 @@ the `unsupported` array rather than silently treated as equivalent.
 | `calendar_event_batch_get`     | `CalendarEvent/get`                                                                      | Reads multiple events by id in one JMAP call.                                                                                                                                                      |
 | `calendar_event_create`        | `CalendarEvent/set create`                                                               | Creates one JSCalendar event. Ordinary event creation executes directly; confirmation is required only when sending scheduling messages.                                                           |
 | `calendar_event_batch_create`  | `CalendarEvent/set create`                                                               | Creates multiple JSCalendar events in one JMAP call. Ordinary event creation executes directly; confirmation is required only when sending scheduling messages.                                    |
-| `calendar_event_update`        | `CalendarEvent/set update`                                                               | Updates an event patch. Mutating; confirmation required. Must use recurrence scope semantics in the tool schema when updating recurring events.                                                    |
+| `calendar_event_update`        | `CalendarEvent/set update`                                                               | Updates an event patch. Ordinary single-event updates execute directly; scheduling-message sends and `future`/`all` recurrence scopes require confirmation.                                        |
 | `calendar_event_delete`        | `CalendarEvent/set destroy`                                                              | Deletes an event or recurrence instance. Destructive; confirmation required.                                                                                                                       |
-| `calendar_event_copy`          | `CalendarEvent/copy`                                                                     | Copies an event between accounts/calendars. Mutating; confirmation required.                                                                                                                       |
+| `calendar_event_copy`          | `CalendarEvent/copy`                                                                     | Copies an event between accounts/calendars. Executes directly.                                                                                                                                     |
 | `calendar_event_changes`       | `CalendarEvent/changes`                                                                  | Sync primitive for stored event changes since a known state.                                                                                                                                       |
 | `calendar_event_query_changes` | `CalendarEvent/queryChanges`                                                             | Sync primitive for changes to a query result since a known query state.                                                                                                                            |
 | `calendar_event_respond`       | `CalendarEvent/get` -> `ParticipantIdentity/get` if needed -> `CalendarEvent/set update` | Updates the caller's participant status. Mutating; confirmation required when it sends scheduling messages or changes an externally visible RSVP.                                                  |
@@ -128,10 +128,10 @@ the `unsupported` array rather than silently treated as equivalent.
 | MCP Tool                           | Underlying Calls                                                        | Notes                                                                                             |
 | ---------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `participant_identity_list`        | `ParticipantIdentity/get`                                               | Lists identities the current user may use as calendar participants.                               |
-| `participant_identity_create`      | `ParticipantIdentity/set create`                                        | Creates a participant identity. Mutating; confirmation required.                                  |
-| `participant_identity_update`      | `ParticipantIdentity/set update`                                        | Updates a participant identity. Mutating; confirmation required.                                  |
+| `participant_identity_create`      | `ParticipantIdentity/set create`                                        | Creates a participant identity. Executes directly.                                                |
+| `participant_identity_update`      | `ParticipantIdentity/set update`                                        | Updates a participant identity. Executes directly.                                                |
 | `participant_identity_delete`      | `ParticipantIdentity/set destroy`                                       | Deletes a participant identity. Destructive; confirmation required.                               |
-| `participant_identity_set_default` | `ParticipantIdentity/set` default identity option                       | Changes the default participant identity. Mutating; confirmation required.                        |
+| `participant_identity_set_default` | `ParticipantIdentity/set` default identity option                       | Changes the default participant identity. Executes directly.                                      |
 | `participant_identity_changes`     | `ParticipantIdentity/changes`                                           | Sync primitive for identity changes since a known state.                                          |
 | `principal_search`                 | `Principal/query`                                                       | Searches principals by text or `calendarAddress` when supported.                                  |
 | `principal_get`                    | `Principal/get`                                                         | Reads principals by id.                                                                           |
@@ -140,14 +140,14 @@ the `unsupported` array rather than silently treated as equivalent.
 
 ## Notification And Alert Tools
 
-| MCP Tool                           | Underlying Calls                                                        | Notes                                                                                                |
-| ---------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `event_notification_list`          | `CalendarEventNotification/query` -> `CalendarEventNotification/get`    | Lists event-change notifications.                                                                    |
-| `event_notification_dismiss`       | `CalendarEventNotification/set destroy`                                 | Dismisses notifications. Mutating; confirmation required for bulk dismissals.                        |
-| `event_notification_changes`       | `CalendarEventNotification/changes`                                     | Sync primitive for notification changes since a known state.                                         |
-| `event_notification_query_changes` | `CalendarEventNotification/queryChanges`                                | Sync primitive for changes to a notification query result.                                           |
-| `alert_acknowledge`                | `CalendarEvent/get` -> `CalendarEvent/set update alerts.*.acknowledged` | Acknowledges/dismisses an event alert. Mutating; confirmation required for bulk or recurring alerts. |
-| `alert_snooze`                     | `CalendarEvent/get` -> `CalendarEvent/set update alerts/relatedTo`      | Adds or updates a snoozed alert relation. Mutating; confirmation required.                           |
+| MCP Tool                           | Underlying Calls                                                        | Notes                                                        |
+| ---------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `event_notification_list`          | `CalendarEventNotification/query` -> `CalendarEventNotification/get`    | Lists event-change notifications.                            |
+| `event_notification_dismiss`       | `CalendarEventNotification/set destroy`                                 | Dismisses notifications. Executes directly.                  |
+| `event_notification_changes`       | `CalendarEventNotification/changes`                                     | Sync primitive for notification changes since a known state. |
+| `event_notification_query_changes` | `CalendarEventNotification/queryChanges`                                | Sync primitive for changes to a notification query result.   |
+| `alert_acknowledge`                | `CalendarEvent/get` -> `CalendarEvent/set update alerts.*.acknowledged` | Acknowledges/dismisses an event alert. Executes directly.    |
+| `alert_snooze`                     | `CalendarEvent/get` -> `CalendarEvent/set update alerts/relatedTo`      | Adds or updates a snoozed alert relation. Executes directly. |
 
 ## Raw iCalendar, CalDAV, Blob, And File Tools
 
@@ -220,11 +220,11 @@ should use ETags with `If-Match` where available.
 
 The following actions always require confirmation:
 
-- Destroying calendars, events, notifications, identities, mailboxes, files, or blobs.
+- Destroying calendars, events, identities, mailboxes, files, or blobs.
 - Updating calendar sharing ACLs.
 - Sending mail or scheduling messages.
 - Updating recurring event series or multiple recurrence instances.
-- Bulk marking, moving, or deleting mail/events.
+- Trashing, permanently deleting, mailbox-removing, or query-powered bulk mail changes.
 - Changing Stalwart `x:*` server settings.
 - Running mutating raw JMAP calls.
 

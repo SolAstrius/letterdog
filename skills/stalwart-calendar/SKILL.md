@@ -72,11 +72,13 @@ For scheduling-visible changes, set `sendSchedulingMessages` deliberately. Defau
 messages for private drafts and holds; send messages when the user is inviting, rescheduling,
 cancelling, or RSVP-ing with attendees who should be notified.
 
-Ordinary event creation executes directly. Mutations that delete, update, copy, RSVP, change
-calendar-level settings, or send scheduling messages may return a preview with `confirmFingerprint`
-and `expiresAt` instead of executing. Present the preview and, when the user confirms, call the same
-tool again with the same arguments plus `confirmFingerprint` and `confirmExpiresAt` set to the
-returned `expiresAt`. Do not invent, inspect, or persist any confirmation secret.
+Ordinary event creation, single-event updates, event copies, calendar create/update/default changes,
+subscription visibility changes, notification dismissals, and alert acknowledge/snooze actions
+execute directly. Mutations that delete, share calendars, RSVP, update `future`/`all` recurrence
+scopes, or send scheduling messages may return a preview with `confirmFingerprint` and `expiresAt`
+instead of executing. Present the preview and, when the user confirms, call the same tool again with
+the same arguments plus `confirmFingerprint` and `confirmExpiresAt` set to the returned `expiresAt`.
+Do not invent, inspect, or persist any confirmation secret.
 
 Use `if_in_state` when the tool response or prior read gives a usable state token.
 

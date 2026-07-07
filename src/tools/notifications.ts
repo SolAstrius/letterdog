@@ -9,7 +9,6 @@ import {
   objectSchema,
   propertiesSchema,
   registerJsonTool,
-  requireMutationConfirmation,
   setArgs,
 } from "./common.ts";
 
@@ -80,18 +79,6 @@ export function registerNotificationTools(server: McpServer, config: EnvConfig):
         destroy: args.ids,
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "event_notification_dismiss",
-        accountId: account.accountId,
-        operation: "delete",
-        resourceKind: "CalendarEventNotification",
-        resourceIds: args.ids,
-        payload,
-        summary: `Dismiss ${args.ids.length} event notification(s).`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(
         account,
         CALENDAR_USING,
@@ -189,18 +176,6 @@ export function registerNotificationTools(server: McpServer, config: EnvConfig):
         update: { [args.event_id]: { [`alerts/${args.alert_id}/acknowledged`]: acknowledged } },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "alert_acknowledge",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "CalendarEventAlert",
-        resourceIds: [args.event_id, args.alert_id],
-        payload,
-        summary: `Acknowledge alert ${args.alert_id} on event ${args.event_id}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, CALENDAR_USING, "CalendarEvent/set", payload);
     },
   );
@@ -236,18 +211,6 @@ export function registerNotificationTools(server: McpServer, config: EnvConfig):
         },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "alert_snooze",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "CalendarEventAlert",
-        resourceIds: [args.event_id, args.alert_id],
-        payload,
-        summary: `Snooze alert ${args.alert_id} until ${args.snoozed_until}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, CALENDAR_USING, "CalendarEvent/set", payload);
     },
   );

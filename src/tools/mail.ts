@@ -513,19 +513,6 @@ function registerDraftTools(server: McpServer, config: EnvConfig): void {
       });
       const create = { [args.create_id ?? "draft"]: email };
       const payload = setArgs(account.accountId, { create, ifInState: args.if_in_state });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "create_draft_email",
-        accountId: account.accountId,
-        operation: "create",
-        resourceKind: "Email",
-        resourceIds: Object.keys(create),
-        payload,
-        precondition: args.if_in_state ? { ifInState: args.if_in_state } : undefined,
-        summary: `Create draft email "${args.message.subject}".`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, MAIL_USING, "Email/set", payload);
     },
   );
@@ -572,19 +559,6 @@ function registerDraftTools(server: McpServer, config: EnvConfig): void {
         destroy: [args.draft_email_id],
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "update_draft_email",
-        accountId: account.accountId,
-        operation: "update",
-        resourceKind: "Email",
-        resourceIds: [args.draft_email_id],
-        payload,
-        precondition: args.if_in_state ? { ifInState: args.if_in_state } : undefined,
-        summary: `Replace draft ${args.draft_email_id}.`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, MAIL_USING, "Email/set", payload);
     },
   );
@@ -918,16 +892,12 @@ function registerMutationTools(server: McpServer, config: EnvConfig): void {
         }
         update[email.id] = patch;
       }
-      return await guardedEmailSet(context, account, {
-        toolName: "archive_emails",
-        operation: "move",
-        resourceIds: args.email_ids,
-        payload: setArgs(account.accountId, { update, ifInState: args.if_in_state }),
-        summary: `Archive ${Object.keys(update).length} email(s).`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-        ifInState: args.if_in_state,
-      });
+      return await context.jmap.single(
+        account,
+        MAIL_USING,
+        "Email/set",
+        setArgs(account.accountId, { update, ifInState: args.if_in_state }),
+      );
     },
   );
 
@@ -1016,19 +986,6 @@ function registerMutationTools(server: McpServer, config: EnvConfig): void {
         create: { [args.create_id ?? "label"]: mailbox },
         ifInState: args.if_in_state,
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "create_mail_label",
-        accountId: account.accountId,
-        operation: "create",
-        resourceKind: "Mailbox",
-        resourceIds: [args.name],
-        payload,
-        precondition: args.if_in_state ? { ifInState: args.if_in_state } : undefined,
-        summary: `Create mail label "${args.name}".`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-      });
-      if (guard) return guard;
       return await context.jmap.single(account, MAIL_USING, "Mailbox/set", payload);
     },
   );
@@ -1078,16 +1035,26 @@ function registerMutationTools(server: McpServer, config: EnvConfig): void {
         trashMailboxId: args.trash ? requireMailboxRole(mailboxes, "trash") : undefined,
       });
       const update = Object.fromEntries(args.email_ids.map((id) => [id, patch]));
-      return await guardedEmailSet(context, account, {
-        toolName: "batch_modify_emails",
-        operation: args.trash ? "move" : "update",
-        resourceIds: args.email_ids,
-        payload: setArgs(account.accountId, { update, ifInState: args.if_in_state }),
-        summary: `Modify ${args.email_ids.length} email(s).`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-        ifInState: args.if_in_state,
-      });
+      const payload = setArgs(account.accountId, { update, ifInState: args.if_in_state });
+      if (
+        requiresBatchModifyConfirmation({
+          trash: args.trash,
+          permanentDelete: args.permanent_delete,
+          removeMailboxIds: args.remove_mailbox_ids,
+        })
+      ) {
+        return await guardedEmailSet(context, account, {
+          toolName: "batch_modify_emails",
+          operation: args.trash ? "move" : "update",
+          resourceIds: args.email_ids,
+          payload,
+          summary: `Modify ${args.email_ids.length} email(s).`,
+          confirmFingerprint: args.confirmFingerprint,
+          confirmExpiresAt: args.confirmExpiresAt,
+          ifInState: args.if_in_state,
+        });
+      }
+      return await context.jmap.single(account, MAIL_USING, "Email/set", payload);
     },
   );
 
@@ -1112,16 +1079,12 @@ function registerMutationTools(server: McpServer, config: EnvConfig): void {
         ? emailModifyPatch({ addKeywords: args.label_ids })
         : emailModifyPatch({ addMailboxIds: args.label_ids });
       const update = Object.fromEntries(args.email_ids.map((id) => [id, patch]));
-      return await guardedEmailSet(context, account, {
-        toolName: "apply_mail_labels",
-        operation: "update",
-        resourceIds: args.email_ids,
-        payload: setArgs(account.accountId, { update, ifInState: args.if_in_state }),
-        summary: `Apply ${args.label_ids.length} label(s) to ${args.email_ids.length} email(s).`,
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
-        ifInState: args.if_in_state,
-      });
+      return await context.jmap.single(
+        account,
+        MAIL_USING,
+        "Email/set",
+        setArgs(account.accountId, { update, ifInState: args.if_in_state }),
+      );
     },
   );
 
@@ -1226,6 +1189,15 @@ export function emailModifyPatch(args: {
   if (args.trashMailboxId) patch[`mailboxIds/${args.trashMailboxId}`] = true;
   if (!Object.keys(patch).length) throw new Error("No mailbox or keyword changes were provided.");
   return patch;
+}
+
+export function requiresBatchModifyConfirmation(args: {
+  trash?: boolean;
+  permanentDelete?: boolean;
+  removeMailboxIds?: string[];
+}): boolean {
+  return args.permanentDelete === true || args.trash === true ||
+    (args.removeMailboxIds?.length ?? 0) > 0;
 }
 
 async function buildEmailFilter(

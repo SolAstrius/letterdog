@@ -1,7 +1,15 @@
 import { parseAuthorizationHeader, parseBearerHeader } from "../src/auth.ts";
 import { READ_ONLY_METHOD_RE } from "../src/constants.ts";
-import { calendarEventCreateMap, calendarEventQueryArgs } from "../src/tools/calendar.ts";
-import { emailModifyPatch, parseMailSearchQuery } from "../src/tools/mail.ts";
+import {
+  calendarEventCreateMap,
+  calendarEventQueryArgs,
+  requiresEventUpdateConfirmation,
+} from "../src/tools/calendar.ts";
+import {
+  emailModifyPatch,
+  parseMailSearchQuery,
+  requiresBatchModifyConfirmation,
+} from "../src/tools/mail.ts";
 
 Deno.test("parseBearerHeader accepts bearer tokens case-insensitively", () => {
   if (parseBearerHeader("Bearer abc123") !== "abc123") throw new Error("Bearer token not parsed");
@@ -81,6 +89,24 @@ Deno.test("calendar event batch create map defaults ids and rejects duplicates",
   }
 });
 
+Deno.test("calendar event update confirmation policy guards only broad or scheduling-visible updates", () => {
+  if (requiresEventUpdateConfirmation(false, undefined)) {
+    throw new Error("ordinary event updates should not require confirmation");
+  }
+  if (requiresEventUpdateConfirmation(false, "this")) {
+    throw new Error("single-instance event updates should not require confirmation");
+  }
+  if (!requiresEventUpdateConfirmation(true, undefined)) {
+    throw new Error("scheduling-message event updates should require confirmation");
+  }
+  if (!requiresEventUpdateConfirmation(false, "future")) {
+    throw new Error("future recurring-event updates should require confirmation");
+  }
+  if (!requiresEventUpdateConfirmation(false, "all")) {
+    throw new Error("series-wide event updates should require confirmation");
+  }
+});
+
 Deno.test("mail search parser maps Gmail-like operators to JMAP filters", () => {
   const parsed = parseMailSearchQuery(
     'from:store@example.com has:attachment is:unread after:2026/07/01 label:"Newsletters"',
@@ -126,4 +152,19 @@ Deno.test("email modify patch maps mailbox ids and keywords", () => {
   if (patch["mailboxIds/inbox"] !== null) throw new Error("label remove patch missing");
   if (patch["keywords/$seen"] !== true) throw new Error("keyword add patch missing");
   if (patch["keywords/$flagged"] !== null) throw new Error("keyword remove patch missing");
+});
+
+Deno.test("batch mail modify confirmation policy guards destructive or removal changes", () => {
+  if (requiresBatchModifyConfirmation({})) {
+    throw new Error("additive explicit mail changes should not require confirmation");
+  }
+  if (!requiresBatchModifyConfirmation({ trash: true })) {
+    throw new Error("trash moves should require confirmation");
+  }
+  if (!requiresBatchModifyConfirmation({ permanentDelete: true })) {
+    throw new Error("permanent delete should require confirmation");
+  }
+  if (!requiresBatchModifyConfirmation({ removeMailboxIds: ["inbox"] })) {
+    throw new Error("mailbox removals should require confirmation");
+  }
 });
