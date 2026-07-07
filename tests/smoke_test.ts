@@ -1,6 +1,6 @@
 import { parseAuthorizationHeader, parseBearerHeader } from "../src/auth.ts";
 import { READ_ONLY_METHOD_RE } from "../src/constants.ts";
-import { calendarEventQueryArgs } from "../src/tools/calendar.ts";
+import { calendarEventCreateMap, calendarEventQueryArgs } from "../src/tools/calendar.ts";
 import { emailModifyPatch, parseMailSearchQuery } from "../src/tools/mail.ts";
 
 Deno.test("parseBearerHeader accepts bearer tokens case-insensitively", () => {
@@ -56,6 +56,28 @@ Deno.test("calendar event searches allow recurrence expansion opt-out", () => {
 
   if (args.expandRecurrences !== false) {
     throw new Error("explicit recurrence expansion opt-out should be preserved");
+  }
+});
+
+Deno.test("calendar event batch create map defaults ids and rejects duplicates", () => {
+  const create = calendarEventCreateMap([
+    { event: { title: "First" } },
+    { create_id: "custom", event: { title: "Second" } },
+  ]);
+
+  if (!create.event1) throw new Error("default create id missing");
+  if (!create.custom) throw new Error("custom create id missing");
+
+  try {
+    calendarEventCreateMap([
+      { create_id: "same", event: { title: "First" } },
+      { create_id: "same", event: { title: "Second" } },
+    ]);
+    throw new Error("duplicate create ids should fail");
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("Duplicate create_id")) {
+      throw error;
+    }
   }
 });
 

@@ -56,7 +56,8 @@ identity.
 
 Use the typed mutation tools before `jmap_call`:
 
-- `calendar_event_create` for new JSCalendar events.
+- `calendar_event_create` for one new JSCalendar event.
+- `calendar_event_batch_create` for multiple new JSCalendar events in one JMAP call.
 - `calendar_event_update` for patches to one event.
 - `calendar_event_delete` for destroys.
 - `calendar_event_copy` for copy/move-like workflows.
@@ -71,10 +72,11 @@ For scheduling-visible changes, set `sendSchedulingMessages` deliberately. Defau
 messages for private drafts and holds; send messages when the user is inviting, rescheduling,
 cancelling, or RSVP-ing with attendees who should be notified.
 
-All mutating tools may return a preview with `confirmFingerprint` and `expiresAt` instead of
-executing. Present the preview and, when the user confirms, call the same tool again with the same
-arguments plus `confirmFingerprint` and `confirmExpiresAt` set to the returned `expiresAt`. Do not
-invent, inspect, or persist any confirmation secret.
+Ordinary event creation executes directly. Mutations that delete, update, copy, RSVP, change
+calendar-level settings, or send scheduling messages may return a preview with `confirmFingerprint`
+and `expiresAt` instead of executing. Present the preview and, when the user confirms, call the same
+tool again with the same arguments plus `confirmFingerprint` and `confirmExpiresAt` set to the
+returned `expiresAt`. Do not invent, inspect, or persist any confirmation secret.
 
 Use `if_in_state` when the tool response or prior read gives a usable state token.
 

@@ -21,16 +21,16 @@ only the bodies or threads that can change the answer.
 
 ## Search And Reading
 
-Prefer `search_emails` for most mailbox tasks because it combines `Email/query` and `Email/get`.
-Use `search_email_ids` when the next operation needs explicit ids, such as labels, archive, delete,
-or batch reads.
+Prefer `search_emails` for most mailbox tasks because it combines `Email/query` and `Email/get`. Use
+`search_email_ids` when the next operation needs explicit ids, such as labels, archive, delete, or
+batch reads.
 
 Good Stalwart search inputs include:
 
-- Gmail-like query text for supported operators: `from:`, `to:`, `cc:`, `bcc:`, `subject:`,
-  `body:`, `text:`, `has:attachment`, `is:read`, `is:unread`, `is:starred`, `is:draft`,
-  `is:important`, `is:answered`, `is:forwarded`, `in:`, `label:`, `after:`, `before:`,
-  `larger:`, `smaller:`, plus free text.
+- Gmail-like query text for supported operators: `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `body:`,
+  `text:`, `has:attachment`, `is:read`, `is:unread`, `is:starred`, `is:draft`, `is:important`,
+  `is:answered`, `is:forwarded`, `in:`, `label:`, `after:`, `before:`, `larger:`, `smaller:`, plus
+  free text.
 - Structured JMAP `filter` when the query is easier to express directly.
 - `sort`, `limit`, `position`, and `collapse_threads` for paging and result shape.
 
@@ -43,9 +43,9 @@ Use small result pages for exploratory reads, usually 10-25 messages. For broad 
 larger pages are acceptable when the user has clearly asked for a bulk action.
 
 Use `read_email` for one message, `batch_read_emails` for a shortlist, `read_email_thread` when
-conversation context changes the answer, and `batch_read_email_threads` for several known thread ids.
-Use `include_body: true` only when snippets and headers are insufficient. Use `include_raw: true`
-only when MIME source, exact headers, or HTML/layout verification matter.
+conversation context changes the answer, and `batch_read_email_threads` for several known thread
+ids. Use `include_body: true` only when snippets and headers are insufficient. Use
+`include_raw: true` only when MIME source, exact headers, or HTML/layout verification matter.
 
 ## Attachments And Raw MIME
 
@@ -132,9 +132,9 @@ Use:
 - `delete_emails` for Trash by default. Permanent deletion requires `permanent: true` and explicit
   user intent.
 
-Search or inspect before bulk mutation. Prefer exact ids for destructive actions. Do not turn a broad
-search into archive/delete/label changes unless the user explicitly asked for that broad operation
-and the query has been checked.
+Search or inspect before bulk mutation. Prefer exact ids for destructive actions. Do not turn a
+broad search into archive/delete/label changes unless the user explicitly asked for that broad
+operation and the query has been checked.
 
 ## Mutation Confirmation
 
@@ -165,8 +165,8 @@ verification, and safer mutation previews.
 
 ## Response Style
 
-Lead mailbox summaries with the latest status, then decisions, open questions, and action items.
-For triage, include sender, subject, why the item is in its bucket, and the likely next action.
+Lead mailbox summaries with the latest status, then decisions, open questions, and action items. For
+triage, include sender, subject, why the item is in its bucket, and the likely next action.
 
 For proposed writes, include the target message/thread ids when useful, the mailbox or keyword
 changes, whether the action is draft/send/archive/trash/permanent delete, and whether confirmation

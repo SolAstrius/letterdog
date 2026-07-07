@@ -42,8 +42,9 @@ room/location, description, recurrence, reminders, and scheduling-message behavi
 Use `calendar_event_create` with a complete JSCalendar event. Set `sendSchedulingMessages: true`
 when the meeting should invite or notify participants.
 
-If the create call returns a confirmation preview, show it and wait for explicit confirmation before
-repeating the call with `confirmFingerprint` and `confirmExpiresAt` set to the returned `expiresAt`.
+Creates that send scheduling messages may return a confirmation preview. Show it and wait for
+explicit confirmation before repeating the call with `confirmFingerprint` and `confirmExpiresAt` set
+to the returned `expiresAt`.
 
 Use `calendar_event_update` for holds that become real meetings, preserving existing fields unless
 the user explicitly changes them.

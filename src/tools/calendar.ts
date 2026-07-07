@@ -32,6 +32,11 @@ const mutationShape = {
   ...confirmSchema,
 };
 
+const eventCreateEntrySchema = z.object({
+  create_id: z.string().optional(),
+  event: objectSchema,
+});
+
 export function registerCalendarTools(server: McpServer, config: EnvConfig): void {
   registerJsonTool(
     server,
@@ -448,18 +453,62 @@ function registerEventTools(server: McpServer, config: EnvConfig): void {
         ifInState: args.if_in_state,
         extra: schedulingExtra(args.sendSchedulingMessages),
       });
-      const guard = await requireMutationConfirmation(context, {
-        toolName: "calendar_event_create",
-        accountId: account.accountId,
-        operation: args.sendSchedulingMessages ? "send" : "create",
-        resourceKind: "CalendarEvent",
-        resourceIds: Object.keys(create),
-        payload,
-        summary: "Create a calendar event.",
-        confirmFingerprint: args.confirmFingerprint,
-        confirmExpiresAt: args.confirmExpiresAt,
+      if (args.sendSchedulingMessages) {
+        const guard = await requireMutationConfirmation(context, {
+          toolName: "calendar_event_create",
+          accountId: account.accountId,
+          operation: "send",
+          resourceKind: "CalendarEvent",
+          resourceIds: Object.keys(create),
+          payload,
+          summary: "Create a calendar event and send scheduling messages.",
+          confirmFingerprint: args.confirmFingerprint,
+          confirmExpiresAt: args.confirmExpiresAt,
+        });
+        if (guard) return guard;
+      }
+      return await context.jmap.single(account, CALENDAR_USING, "CalendarEvent/set", payload);
+    },
+  );
+
+  registerJsonTool(
+    server,
+    config,
+    "calendar_event_batch_create",
+    "Create multiple events with one CalendarEvent/set create call.",
+    {
+      ...mutationShape,
+      events: z.array(eventCreateEntrySchema).min(1).max(100),
+      sendSchedulingMessages: z.boolean().optional(),
+    },
+    async (args, context) => {
+      const account = await context.jmap.resolveAccount(
+        context.actor,
+        CALENDAR_USING[1],
+        args.account_id,
+      );
+      const create = calendarEventCreateMap(args.events);
+      const payload = setArgs(account.accountId, {
+        create,
+        ifInState: args.if_in_state,
+        extra: schedulingExtra(args.sendSchedulingMessages),
       });
-      if (guard) return guard;
+      if (args.sendSchedulingMessages) {
+        const guard = await requireMutationConfirmation(context, {
+          toolName: "calendar_event_batch_create",
+          accountId: account.accountId,
+          operation: "send",
+          resourceKind: "CalendarEvent",
+          resourceIds: Object.keys(create),
+          payload,
+          summary: `Create ${
+            Object.keys(create).length
+          } calendar event(s) and send scheduling messages.`,
+          confirmFingerprint: args.confirmFingerprint,
+          confirmExpiresAt: args.confirmExpiresAt,
+        });
+        if (guard) return guard;
+      }
       return await context.jmap.single(account, CALENDAR_USING, "CalendarEvent/set", payload);
     },
   );
@@ -761,6 +810,20 @@ export function calendarEventQueryArgs(args: {
     accountId: args.accountId,
     ...pickQuery({ ...args, filter, expandRecurrences }),
   };
+}
+
+export function calendarEventCreateMap(
+  entries: { create_id?: string; event: Record<string, unknown> }[],
+): Record<string, unknown> {
+  const create: Record<string, unknown> = {};
+  entries.forEach((entry, index) => {
+    const createId = entry.create_id ?? `event${index + 1}`;
+    if (createId in create) {
+      throw new Error(`Duplicate create_id in calendar event batch: ${createId}`);
+    }
+    create[createId] = entry.event;
+  });
+  return create;
 }
 
 function asIds(value: unknown): string[] {

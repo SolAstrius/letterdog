@@ -42,9 +42,10 @@ recurring events. For cancellations, use `calendar_event_delete` with explicit i
 
 ## Execute Safely
 
-Mutating tools may return a preview with `confirmFingerprint` and `expiresAt`. Present the preview;
-execute only after the user confirms, by repeating the same call with `confirmFingerprint` and
-`confirmExpiresAt` set to the returned `expiresAt`.
+Ordinary hold creation executes directly. Reschedules, cancellations, recurring-event changes, and
+scheduling-message sends may return a preview with `confirmFingerprint` and `expiresAt`. Present the
+preview; execute only after the user confirms, by repeating the same call with `confirmFingerprint`
+and `confirmExpiresAt` set to the returned `expiresAt`.
 
 Use `if_in_state` when available. If state changed between read and write, reread and rebuild the
 plan rather than forcing stale changes.
