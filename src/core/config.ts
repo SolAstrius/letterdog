@@ -7,7 +7,11 @@
  * - CONFIRM_POLICY             strict | balanced | minimal (default balanced; personal deploy
  *                              runs minimal). See docs/v2-design.md "Confirmation policy".
  * - CONFIRMATION_SECRET        HMAC secret for confirm tokens (fallback: MCP_CONFIRMATION_SECRET;
- *                              random in-memory dev secret when unset — tokens die on restart)
+ *                              then a load-or-create per-user secret file at
+ *                              $XDG_CONFIG_HOME|~/.config/letterdog/confirm_secret so separate CLI
+ *                              invocations can verify each other's tokens; a random in-memory dev
+ *                              secret — tokens die with the process — only when the file is
+ *                              unreachable, e.g. the sandboxed server's --allow-read=.env)
  * - ENABLE_ADMIN_TOOLS         "true" to register admin.* / sieve.* ops (default false)
  * - ENABLE_SYNC_TOOLS          "true" to register sync.* ops (default false)
  * - SESSION_CACHE_TTL_MS       JMAP session cache TTL per actor (default 60000)
@@ -52,6 +56,52 @@ function randomSecret(): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
+/**
+ * Resolve the confirm-token HMAC secret: env → persisted per-user secret file → in-memory.
+ *
+ * The file tier exists for the CLI: the --dry-run → --confirm flow spans two processes, so a
+ * per-process random secret can never verify the first invocation's token (and the only
+ * workaround — the caller exporting an ad-hoc CONFIRMATION_SECRET — is indistinguishable from an
+ * agent self-approving a gated mutation). Load-or-create keeps the secret machine-local with no
+ * ceremony. Surfaces without the needed grants (the deployed server runs --allow-read=.env and no
+ * --allow-write) fall through to the in-memory secret, which still works there: the server is
+ * long-lived, so both token phases hit the same process. Set CONFIRMATION_SECRET in the
+ * deployment to keep tokens valid across restarts.
+ */
+async function resolveConfirmationSecret(): Promise<string> {
+  const fromEnv = Deno.env.get("CONFIRMATION_SECRET") || Deno.env.get("MCP_CONFIRMATION_SECRET");
+  if (fromEnv) return fromEnv;
+
+  try {
+    const home = Deno.env.get("HOME");
+    const configHome = Deno.env.get("XDG_CONFIG_HOME") || (home ? `${home}/.config` : undefined);
+    if (configHome) {
+      const dir = `${configHome}/letterdog`;
+      const file = `${dir}/confirm_secret`;
+      try {
+        const existing = (await Deno.readTextFile(file)).trim();
+        if (existing.length >= 32) return existing;
+        console.warn(`Ignoring ${file}: secret shorter than 32 chars.`);
+      } catch (err) {
+        if (!(err instanceof Deno.errors.NotFound)) throw err;
+        const secret = randomSecret();
+        await Deno.mkdir(dir, { recursive: true, mode: 0o700 });
+        await Deno.writeTextFile(file, secret + "\n", { mode: 0o600 });
+        console.warn(`Generated persistent confirmation secret at ${file}.`);
+        return secret;
+      }
+    }
+  } catch {
+    // Missing read/write permission or unwritable home — fall through to the in-memory secret.
+  }
+
+  console.warn(
+    "Confirmation secret not configured; generated an in-memory dev secret (confirm tokens die " +
+      "with this process).",
+  );
+  return randomSecret();
+}
+
 function intEnv(name: string, fallback: number): number {
   const raw = Deno.env.get(name);
   if (!raw) return fallback;
@@ -87,12 +137,7 @@ export async function loadV2Config(): Promise<V2Config> {
     );
   }
 
-  const configuredSecret = Deno.env.get("CONFIRMATION_SECRET") ||
-    Deno.env.get("MCP_CONFIRMATION_SECRET");
-  const confirmationSecret = configuredSecret || randomSecret();
-  if (!configuredSecret) {
-    console.warn("Confirmation secret not configured; generated an in-memory dev secret.");
-  }
+  const confirmationSecret = await resolveConfirmationSecret();
 
   return {
     stalwartBaseUrl: trimSlash(Deno.env.get("STALWART_BASE_URL") ?? "https://mail.astrius.ink"),

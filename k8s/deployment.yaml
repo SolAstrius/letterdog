@@ -33,6 +33,16 @@ spec:
               value: "false"
             - name: CONFIRM_POLICY
               value: minimal
+            # Created out-of-band (not in git):
+            #   kubectl -n stalwart-jmap-mcp create secret generic letterdog-confirm \
+            #     --from-literal=confirmation-secret="$(openssl rand -base64 32)"
+            # Keeps confirm tokens verifiable across pod restarts (the sandboxed server can't
+            # reach the per-user secret-file fallback that the CLI uses).
+            - name: CONFIRMATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: letterdog-confirm
+                  key: confirmation-secret
           ports:
             - name: http
               containerPort: 8787
