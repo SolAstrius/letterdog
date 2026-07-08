@@ -3,19 +3,20 @@ FROM denoland/deno:2.8.2
 WORKDIR /app
 
 COPY deno.json deno.lock ./
-COPY main.ts ./main.ts
+COPY v2.ts ./v2.ts
 COPY src ./src
 COPY scripts ./scripts
 
-RUN deno cache main.ts scripts/fetch_schemas.ts scripts/mcp_smoke.ts scripts/mcp_live_probe.ts
+RUN deno cache v2.ts
 
 ENV MCP_TRANSPORT=http
 ENV PORT=8787
 ENV STALWART_BASE_URL=https://mail.astrius.ink
 ENV STALWART_ALLOW_ENV_BEARER_FALLBACK=false
+ENV CONFIRM_POLICY=balanced
 
 EXPOSE 8787
 
 USER deno
 
-CMD ["run", "--allow-net", "--allow-env", "--allow-read=.env", "main.ts"]
+CMD ["run", "--allow-net", "--allow-env", "--allow-read=.env", "v2.ts"]
