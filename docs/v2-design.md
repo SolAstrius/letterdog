@@ -5,7 +5,9 @@ RFC 9670, draft-ietf-jmap-calendars-26) and live probes against Stalwart v0.16.1
 
 ## Architecture
 
-One Deno codebase, one domain core, two frontends built together:
+One Deno codebase, one domain core, two frontends built together. The core targets **JMAP the
+standard**, not Stalwart specifically — Stalwart is the first provider adapter (see "Beyond
+Stalwart" below).
 
 ```
                     ┌──────────────────────────────┐
@@ -39,18 +41,82 @@ iCalendar/MIME fidelity, sieve/admin, or anything the MCP doesn't wrap.*
 ```
 src/
   core/
+    ops/               # THE operation registry — single source for both frontends (see below)
     jmap/client.ts     # request/call/batch + session cache (TTL 60s, per actor) + #backrefs
     jmap/envelopes.ts  # normalize /get,/query,/set; SetError discriminated union;
                        #   partial failures surfaced as failed: {id: {type, description, ...}}
     jmap/types.ts      # typed Email, Mailbox, Thread, Identity, Submission, Principal
     schemas/           # Zod: jscalendar.ts (RFC 8984+draft-26), jscontact.ts, mail.ts, common.ts
+    projections.ts     # brief/full/raw projections per object type (see "Output economy")
     safety.ts          # method classification (read/mutate/destructive) + confirm tokens
     compose.ts         # MIME assembly, reply building (RFC-correct threading), forward quoting
     query.ts           # Gmail-syntax → Email/query FilterCondition translation
     caldav.ts          # existing CalDAV client
-  mcp/                 # MCP entry: tool registrations only (schema + description + core call)
-  cli/                 # CLI entry: subcommand parsing only
+    provider/          # provider adapters: stalwart.ts (hybrid shapes, x:* admin), generic.ts
+  mcp/                 # MCP entry: compiles ops → tools (near-zero code of its own)
+  cli/                 # CLI entry: compiles ops → subcommands + --help (ditto)
 ```
+
+### Operation registry — define once, surface twice
+
+Every capability is one **op definition**:
+
+```ts
+defineOp({
+  name: "mail.search",              // CLI: `<bin> mail search`; MCP: `search_emails`
+  description: "...",                // MCP description; CLI --help text
+  input: SearchSchema,               // Zod: MCP inputSchema; CLI flags derived (arrays → repeat/CSV)
+  annotations: { readOnly: true },   // MCP annotations; CLI safety gating (--yes/--confirm)
+  projection: "email",               // which brief/full/raw projector applies
+  surfaces: ["mcp", "cli"],          // curated MCP set = ops tagged "mcp"; CLI gets everything
+  handler: (args, ctx) => ...,       // one implementation
+})
+```
+
+The MCP frontend registers ops tagged `mcp`; the CLI exposes **all** ops. Division of labor is a
+tag, not duplicated code — promoting an op to the MCP surface later is a one-word change. This is
+also what makes the harness extractable for non-PIM connectors.
+
+### Batch policy
+
+**Batch-first is the default, because JMAP is.** `/get` takes id arrays and `/set` takes maps — a
+batch op costs the same server round-trip as a singular one, and one tool call with 20 ids costs a
+fraction of the tokens of 20 tool calls.
+
+- Every id-taking read and every **uniform** mutation (same change applied to N objects) accepts
+  `ids: string[]` — no singular/batch tool pairs anywhere. Singular use = array of one.
+- Semantically singular verbs stay singular: `reply_email`, `respond_to_event`, `cancel_send`,
+  `update_event` (one patch, one target).
+- Bulk-with-distinct-payloads (N objects, N different patches) is CLI/`jmap_call` territory — the
+  MCP schema stays simple.
+- Batch results always use the per-item envelope: `{items/updated, failed: {id: SetError}}`;
+  chunking to `maxObjectsInSet` happens in core, invisibly.
+- Skills teach the pattern: accumulate ids from a search, then act once.
+
+### Output economy
+
+Raw JMAP/Stalwart output is a token sink (nested `EmailAddress` objects, mailbox ids requiring a
+second lookup, `bodyStructure` trees, pretty-printed JSON). Every op response goes through a
+**projection**; `brief` is the default everywhere.
+
+| Object | `brief` projection (default) |
+|---|---|
+| Email | `{id, thread_id, from: "Name <addr>", to: ["..."], subject, received_at, preview (≤120 chars), flags: "unread flagged", mailboxes: ["inbox"], has_attachment}` — addresses flattened to strings, mailbox ids resolved to role/name, keywords collapsed to one field |
+| Event | `{id, title, start, end (computed from duration — models don't do ISO-8601 arithmetic), time_zone, calendar: "name", location, virtual: url, participants: {count, own_status}, recurring: bool, status}` |
+| Contact | `{id, name, emails: ["..."], phones, org}` |
+| Calendar | `{id, name, role_hints, is_default, my_rights: "read write share"}` |
+| BusyPeriod | `{start, end, status}` |
+
+Rules:
+
+- `projection: "brief" | "full" | "raw"` on every read op; `fields: [...]` for surgical extras.
+  `raw` is the spec-shape passthrough (always available — faithfulness is one arg away).
+- Bodies never by default. `include_body` + `body_as: "text" | "markdown" | "html"` — HTML is
+  converted to text/markdown **server-side** (html-to-text), which routinely cuts email bodies
+  5–20×. `max_body_bytes` maps to JMAP's UTF-8-safe `maxBodyValueBytes`.
+- Compact JSON (no pretty-printing); lists as arrays of flat objects; `limit` defaults 25;
+  `total` opt-in (`calculateTotal` is spec-optional and can be slow anyway).
+- CLI mirrors this: human tables on TTY, `--json` = brief projection, `--json=full|raw` for more.
 
 Core rules carried over from the first draft (unchanged, they apply to both surfaces):
 
@@ -66,7 +132,6 @@ Core rules carried over from the first draft (unchanged, they apply to both surf
   account, operation, resource ids, payload hash — with embedded expiry + actor fingerprint).
   MCP: repeat the call with `confirm_token`. CLI: mutating commands print a preview and the token;
   re-run with `--confirm <token>` (destructive ops) or `--yes` (routine sends).
-- Compact JSON everywhere; email bodies truncated server-side via `maxBodyValueBytes`.
 
 ## Surface 1: MCP — the everyday PIM set (~22 tools)
 
@@ -173,6 +238,32 @@ it's meaningful. The harness's own Bash permission prompt is the second gate.
 - Skill content absorbs what the v1 verb catalog over-encoded in schemas: reply etiquette,
   recurrence-scope mechanics, scheduling-message discipline.
 
+## Beyond Stalwart
+
+Two levels of generalization, both deliberate:
+
+**1. The PIM core targets JMAP-the-standard.** Everything spec-defined lives in `core/`; anything
+implementation-specific goes through a provider adapter:
+
+```ts
+interface Provider {
+  session(auth): Session;              // endpoint discovery, auth shaping
+  normalize: ShapeNormalizers;         // e.g. Stalwart's 8984/bis hybrid → canonical internal shape
+  extensions: OpDefinition[];          // e.g. Stalwart x:* admin ops, sieve specifics
+  quirks: Quirks;                      // e.g. "expandRecurrences requires both bounds"
+}
+```
+
+The Stalwart adapter is the first and only one for now, but the core must compile without it — a
+Fastmail or Cyrus JMAP account should work by pointing the session URL at it. CalDAV stays the
+raw-fidelity escape hatch either way.
+
+**2. The harness is extractable.** The op registry + dual-frontend compilation + confirm tokens +
+envelopes/projections have nothing PIM-specific in them. Other connectors in the fleet (ebag,
+annas, spotify) reinvent exactly this. Plan: build it **in-repo** under `core/ops/` with zero
+Stalwart imports, and extract to a standalone `connector-kit` module only when a second consumer
+actually adopts it — no speculative framework building, but no accidental coupling either.
+
 ## Packaging
 
 - `.claude-plugin/` plugin: skills + `.mcp.json` (deployed URL, `Authorization: Bearer
@@ -199,3 +290,7 @@ it's meaningful. The harness's own Bash permission prompt is the second gate.
   decide by testing against real transcripts.
 - JSContact digest scope: RFC 9553 Card is large; probably only Card-level props the PIM needs
   (names, emails, phones, addresses, organizations, notes, linked principals).
+- Brief-projection field sets: validate against real transcripts (which fields do agents actually
+  read?) before freezing; `fields` opt-in makes wrong guesses cheap to correct.
+- Op-name ↔ MCP-tool-name mapping convention (`mail.search` → `search_emails` vs mechanical
+  `mail_search`) — mechanical is simpler for the registry, verb-first reads better to models.
