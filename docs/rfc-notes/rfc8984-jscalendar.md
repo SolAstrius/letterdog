@@ -267,6 +267,11 @@ keys containing `/`, e.g. custom TimeZoneIds).
 - **UTC start times are an anti-pattern**: the spec exists partly because storing starts in UTC
   breaks when tz rules change. Always LocalDateTime + `timeZone`; omit `timeZone` deliberately only
   for floating (wall-clock-everywhere) events like the "yoga at 7am wherever I am" example.
+- **The converse relabel footgun**: `timeZone` is the interpretation frame for `start`, not a
+  display label. Patching `timeZone` alone rebases the wall-clock onto the new zone and silently
+  shifts the absolute instant (16:00 Etc/UTC "relabeled" Europe/Moscow moves the event 3h early).
+  An instant-preserving relabel must convert `start` into the new zone in the same patch
+  (16:00 Etc/UTC → 19:00 Europe/Moscow). Confirmed live incident, 2026-07-08.
 - **All-day ≠ dateless**: `showWithoutTime: true` + `start: "1900-04-01T00:00:00"` +
   `duration: "P1D"` is the RFC's all-day idiom.
 - **Non-Gregorian recurrence** via `rscale` (any CLDR calendar: `chinese`, `hebrew`, `islamic`…),

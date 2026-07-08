@@ -5,308 +5,193 @@
 
 One op registry (`src/core/ops/`), two surfaces:
 
-- **MCP** (deployed at `https://mcp.mail.astrius.ink/mcp`): the 22 curated everyday tools below.
-  Auth: per-request `Authorization` header, forwarded verbatim to the JMAP server.
-- **CLI** (`letterdog`): every op, including the 41 CLI-only ones. Auth: `STALWART_BEARER` env (or
-  `--bearer-env NAME`), plus `--url` / `--account` overrides.
+- **MCP** (deployed at `https://mcp.mail.astrius.ink/mcp`): the 22 curated
+  everyday tools below. Auth: per-request `Authorization` header, forwarded verbatim to the
+  JMAP server.
+- **CLI** (`letterdog`): every op, including the 41 CLI-only ones. Auth:
+  `STALWART_BEARER` env (or `--bearer-env NAME`), plus `--url` / `--account` overrides.
 
 Confirmation classes (`CONFIRM_POLICY` = strict | balanced | minimal; see
-[v2-design.md](v2-design.md)): `none` never gates; `outward` gates per policy; `destructive`/`blast`
-are two-phase under every policy. Two-phase = the call returns `confirmation_required` +
-`confirm_token`; repeat the identical call with the token (CLI: `--dry-run` to preview, then
-`--confirm <token>`; `--yes` approves outward sends).
+[v2-design.md](v2-design.md)): `none` never gates; `outward` gates per policy;
+`destructive`/`blast` are two-phase under every policy. Two-phase = the call returns
+`confirmation_required` + `confirm_token`; repeat the identical call with the token (CLI:
+`--dry-run` to preview, then `--confirm <token>`; `--yes` approves outward sends).
 
 ## MCP surface (22 tools)
 
-| MCP tool           | Op                      | CLI equivalent                    | Confirm     | Projection | Capabilities            |
-| ------------------ | ----------------------- | --------------------------------- | ----------- | ---------- | ----------------------- |
-| `whoami`           | `session.whoami`        | `letterdog session whoami`        | none        | session    | read-only               |
-| `search_emails`    | `mail.search`           | `letterdog mail search`           | none        | email      | read-only               |
-| `read_emails`      | `mail.read`             | `letterdog mail read`             | none        | email      | read-only               |
-| `read_thread`      | `mail.thread`           | `letterdog mail thread`           | none        | email      | read-only               |
-| `read_attachment`  | `attachment.read`       | `letterdog attachment read`       | none        | blob       | read-only               |
-| `reply_email`      | `mail.reply`            | `letterdog mail reply`            | outward     | email      | —                       |
-| `send_email`       | `mail.send`             | `letterdog mail send`             | outward     | email      | —                       |
-| `cancel_send`      | `mail.cancel_send`      | `letterdog mail cancel_send`      | none        | raw        | idempotent              |
-| `forward_emails`   | `mail.forward`          | `letterdog mail forward`          | outward     | email      | —                       |
-| `organize_emails`  | `mail.organize`         | `letterdog mail organize`         | none        | email      | idempotent              |
-| `delete_emails`    | `mail.delete`           | `letterdog mail delete`           | destructive | email      | destructive, idempotent |
-| `list_calendars`   | `calendar.list`         | `letterdog calendar list`         | none        | calendar   | read-only               |
-| `search_events`    | `event.search`          | `letterdog event search`          | none        | event      | read-only               |
-| `read_events`      | `event.read`            | `letterdog event read`            | none        | event      | read-only               |
-| `create_events`    | `event.create`          | `letterdog event create`          | outward     | event      | —                       |
-| `update_event`     | `event.update`          | `letterdog event update`          | outward     | event      | idempotent              |
-| `delete_events`    | `event.delete`          | `letterdog event delete`          | destructive | event      | destructive, idempotent |
-| `respond_to_event` | `event.rsvp`            | `letterdog event rsvp`            | outward     | event      | idempotent              |
-| `get_availability` | `calendar.availability` | `letterdog calendar availability` | none        | busy       | read-only               |
-| `search_people`    | `people.search`         | `letterdog people search`         | none        | person     | read-only               |
-| `read_contacts`    | `contact.read`          | `letterdog contact read`          | none        | contact    | read-only               |
-| `jmap_call`        | `raw.jmap`              | `letterdog raw jmap`              | blast       | raw        | destructive             |
+| MCP tool | Op | CLI equivalent | Confirm | Projection | Capabilities |
+| --- | --- | --- | --- | --- | --- |
+| `whoami` | `session.whoami` | `letterdog session whoami` | none | session | read-only |
+| `search_emails` | `mail.search` | `letterdog mail search` | none | email | read-only |
+| `read_emails` | `mail.read` | `letterdog mail read` | none | email | read-only |
+| `read_thread` | `mail.thread` | `letterdog mail thread` | none | email | read-only |
+| `read_attachment` | `attachment.read` | `letterdog attachment read` | none | blob | read-only |
+| `reply_email` | `mail.reply` | `letterdog mail reply` | outward | email | — |
+| `send_email` | `mail.send` | `letterdog mail send` | outward | email | — |
+| `cancel_send` | `mail.cancel_send` | `letterdog mail cancel_send` | none | raw | idempotent |
+| `forward_emails` | `mail.forward` | `letterdog mail forward` | outward | email | — |
+| `organize_emails` | `mail.organize` | `letterdog mail organize` | none | email | idempotent |
+| `delete_emails` | `mail.delete` | `letterdog mail delete` | destructive | email | destructive, idempotent |
+| `list_calendars` | `calendar.list` | `letterdog calendar list` | none | calendar | read-only |
+| `search_events` | `event.search` | `letterdog event search` | none | event | read-only |
+| `read_events` | `event.read` | `letterdog event read` | none | event | read-only |
+| `create_events` | `event.create` | `letterdog event create` | outward | event | — |
+| `update_event` | `event.update` | `letterdog event update` | outward | event | idempotent |
+| `delete_events` | `event.delete` | `letterdog event delete` | destructive | event | destructive, idempotent |
+| `respond_to_event` | `event.rsvp` | `letterdog event rsvp` | outward | event | idempotent |
+| `get_availability` | `calendar.availability` | `letterdog calendar availability` | none | busy | read-only |
+| `search_people` | `people.search` | `letterdog people search` | none | person | read-only |
+| `read_contacts` | `contact.read` | `letterdog contact read` | none | contact | read-only |
+| `jmap_call` | `raw.jmap` | `letterdog raw jmap` | blast | raw | destructive |
 
 ## CLI-only ops (41)
 
-| CLI command                       | Op                      | MCP alias                    | Confirm     | Projection   | Capabilities            |
-| --------------------------------- | ----------------------- | ---------------------------- | ----------- | ------------ | ----------------------- |
-| `letterdog identity list`         | `identity.list`         | (`list_identities`)          | none        | identity     | read-only               |
-| `letterdog attachment save`       | `attachment.save`       | (`save_attachment`)          | none        | blob         | read-only               |
-| `letterdog mail export`           | `mail.export`           | (`export_emails`)            | none        | raw          | read-only               |
-| `letterdog mail import`           | `mail.import`           | (`import_emails`)            | none        | email        | —                       |
-| `letterdog draft list`            | `draft.list`            | (`list_drafts`)              | none        | email        | read-only, idempotent   |
-| `letterdog draft create`          | `draft.create`          | (`create_draft`)             | none        | email        | —                       |
-| `letterdog draft update`          | `draft.update`          | (`update_draft`)             | none        | email        | —                       |
-| `letterdog draft delete`          | `draft.delete`          | (`delete_draft`)             | none        | email        | destructive, idempotent |
-| `letterdog vacation get`          | `vacation.get`          | (`get_vacation`)             | none        | raw          | read-only, idempotent   |
-| `letterdog vacation set`          | `vacation.set`          | (`set_vacation`)             | outward     | raw          | idempotent              |
-| `letterdog mailbox list`          | `mailbox.list`          | (`list_mailboxes`)           | none        | mailbox      | read-only, idempotent   |
-| `letterdog mailbox create`        | `mailbox.create`        | (`create_mailbox`)           | none        | mailbox      | —                       |
-| `letterdog mailbox rename`        | `mailbox.rename`        | (`rename_mailbox`)           | none        | mailbox      | idempotent              |
-| `letterdog mailbox delete`        | `mailbox.delete`        | (`delete_mailbox`)           | destructive | mailbox      | destructive, idempotent |
-| `letterdog calendar create`       | `calendar.create`       | (`create_calendar`)          | none        | calendar     | —                       |
-| `letterdog calendar update`       | `calendar.update`       | (`update_calendar`)          | none        | calendar     | idempotent              |
-| `letterdog calendar delete`       | `calendar.delete`       | (`delete_calendar`)          | destructive | calendar     | destructive             |
-| `letterdog calendar share`        | `calendar.share`        | (`share_calendar`)           | blast       | calendar     | —                       |
-| `letterdog calendar identity_set` | `calendar.identity_set` | (`set_participant_identity`) | none        | identity     | —                       |
-| `letterdog contact search`        | `contact.search`        | (`search_contacts`)          | none        | contact      | read-only               |
-| `letterdog blob upload`           | `blob.upload`           | (`upload_blob`)              | none        | blob         | —                       |
-| `letterdog blob download`         | `blob.download`         | (`download_blob`)            | none        | blob         | read-only               |
-| `letterdog blob lookup`           | `blob.lookup`           | (`lookup_blob`)              | none        | blob         | read-only               |
-| `letterdog file list`             | `file.list`             | (`list_files`)               | none        | none         | read-only               |
-| `letterdog notify list`           | `notify.list`           | (`list_notifications`)       | none        | notification | read-only               |
-| `letterdog notify dismiss`        | `notify.dismiss`        | (`dismiss_notifications`)    | none        | notification | idempotent              |
-| `letterdog alert ack`             | `alert.ack`             | (`ack_alert`)                | none        | raw          | idempotent              |
-| `letterdog alert snooze`          | `alert.snooze`          | (`snooze_alert`)             | none        | raw          | —                       |
-| `letterdog dav discover`          | `dav.discover`          | (`dav_discover`)             | none        | raw          | read-only               |
-| `letterdog dav list`              | `dav.list`              | (`dav_list`)                 | none        | raw          | read-only               |
-| `letterdog dav get`               | `dav.get`               | (`dav_get`)                  | none        | raw          | read-only               |
-| `letterdog dav put`               | `dav.put`               | (`dav_put`)                  | blast       | raw          | destructive             |
-| `letterdog dav delete`            | `dav.delete`            | (`dav_delete`)               | destructive | raw          | destructive, idempotent |
-| `letterdog admin settings_get`    | `admin.settings_get`    | (`get_admin_settings`)       | none        | raw          | read-only               |
-| `letterdog admin settings_update` | `admin.settings_update` | (`update_admin_settings`)    | blast       | raw          | —                       |
-| `letterdog sieve list`            | `sieve.list`            | (`list_sieve_scripts`)       | none        | raw          | read-only               |
-| `letterdog sieve get`             | `sieve.get`             | (`get_sieve_script`)         | none        | raw          | read-only               |
-| `letterdog sieve put`             | `sieve.put`             | (`put_sieve_script`)         | blast       | raw          | —                       |
-| `letterdog sieve activate`        | `sieve.activate`        | (`activate_sieve_script`)    | blast       | raw          | idempotent              |
-| `letterdog sync changes`          | `sync.changes`          | (`sync_changes`)             | none        | raw          | read-only               |
-| `letterdog sync query_changes`    | `sync.query_changes`    | (`sync_query_changes`)       | none        | raw          | read-only               |
+| CLI command | Op | MCP alias | Confirm | Projection | Capabilities |
+| --- | --- | --- | --- | --- | --- |
+| `letterdog identity list` | `identity.list` | (`list_identities`) | none | identity | read-only |
+| `letterdog attachment save` | `attachment.save` | (`save_attachment`) | none | blob | read-only |
+| `letterdog mail export` | `mail.export` | (`export_emails`) | none | raw | read-only |
+| `letterdog mail import` | `mail.import` | (`import_emails`) | none | email | — |
+| `letterdog draft list` | `draft.list` | (`list_drafts`) | none | email | read-only, idempotent |
+| `letterdog draft create` | `draft.create` | (`create_draft`) | none | email | — |
+| `letterdog draft update` | `draft.update` | (`update_draft`) | none | email | — |
+| `letterdog draft delete` | `draft.delete` | (`delete_draft`) | none | email | destructive, idempotent |
+| `letterdog vacation get` | `vacation.get` | (`get_vacation`) | none | raw | read-only, idempotent |
+| `letterdog vacation set` | `vacation.set` | (`set_vacation`) | outward | raw | idempotent |
+| `letterdog mailbox list` | `mailbox.list` | (`list_mailboxes`) | none | mailbox | read-only, idempotent |
+| `letterdog mailbox create` | `mailbox.create` | (`create_mailbox`) | none | mailbox | — |
+| `letterdog mailbox rename` | `mailbox.rename` | (`rename_mailbox`) | none | mailbox | idempotent |
+| `letterdog mailbox delete` | `mailbox.delete` | (`delete_mailbox`) | destructive | mailbox | destructive, idempotent |
+| `letterdog calendar create` | `calendar.create` | (`create_calendar`) | none | calendar | — |
+| `letterdog calendar update` | `calendar.update` | (`update_calendar`) | none | calendar | idempotent |
+| `letterdog calendar delete` | `calendar.delete` | (`delete_calendar`) | destructive | calendar | destructive |
+| `letterdog calendar share` | `calendar.share` | (`share_calendar`) | blast | calendar | — |
+| `letterdog calendar identity_set` | `calendar.identity_set` | (`set_participant_identity`) | none | identity | — |
+| `letterdog contact search` | `contact.search` | (`search_contacts`) | none | contact | read-only |
+| `letterdog blob upload` | `blob.upload` | (`upload_blob`) | none | blob | — |
+| `letterdog blob download` | `blob.download` | (`download_blob`) | none | blob | read-only |
+| `letterdog blob lookup` | `blob.lookup` | (`lookup_blob`) | none | blob | read-only |
+| `letterdog file list` | `file.list` | (`list_files`) | none | none | read-only |
+| `letterdog notify list` | `notify.list` | (`list_notifications`) | none | notification | read-only |
+| `letterdog notify dismiss` | `notify.dismiss` | (`dismiss_notifications`) | none | notification | idempotent |
+| `letterdog alert ack` | `alert.ack` | (`ack_alert`) | none | raw | idempotent |
+| `letterdog alert snooze` | `alert.snooze` | (`snooze_alert`) | none | raw | — |
+| `letterdog dav discover` | `dav.discover` | (`dav_discover`) | none | raw | read-only |
+| `letterdog dav list` | `dav.list` | (`dav_list`) | none | raw | read-only |
+| `letterdog dav get` | `dav.get` | (`dav_get`) | none | raw | read-only |
+| `letterdog dav put` | `dav.put` | (`dav_put`) | blast | raw | destructive |
+| `letterdog dav delete` | `dav.delete` | (`dav_delete`) | destructive | raw | destructive, idempotent |
+| `letterdog admin settings_get` | `admin.settings_get` | (`get_admin_settings`) | none | raw | read-only |
+| `letterdog admin settings_update` | `admin.settings_update` | (`update_admin_settings`) | blast | raw | — |
+| `letterdog sieve list` | `sieve.list` | (`list_sieve_scripts`) | none | raw | read-only |
+| `letterdog sieve get` | `sieve.get` | (`get_sieve_script`) | none | raw | read-only |
+| `letterdog sieve put` | `sieve.put` | (`put_sieve_script`) | blast | raw | — |
+| `letterdog sieve activate` | `sieve.activate` | (`activate_sieve_script`) | blast | raw | idempotent |
+| `letterdog sync changes` | `sync.changes` | (`sync_changes`) | none | raw | read-only |
+| `letterdog sync query_changes` | `sync.query_changes` | (`sync_query_changes`) | none | raw | read-only |
 
 ## Op descriptions
 
 ### session
-
-- **`session.whoami`** (MCP + CLI: `whoami` / `letterdog session whoami`, confirm: none) — Identify
-  the connected Letterdog account (the user's personal self-hosted mail/calendar/contacts over
-  JMAP).
+- **`session.whoami`** (MCP + CLI: `whoami` / `letterdog session whoami`, confirm: none) — Identify the connected Letterdog account (the user's personal self-hosted mail/calendar/contacts over JMAP).
 
 ### identity
-
-- **`identity.list`** (CLI only: `list_identities` / `letterdog identity list`, confirm: none) —
-  List the account's mail sending identities (Identity/get) and calendar participant identities
-  (ParticipantIdentity/get) — the from-addresses available to send_email/reply and the
-  calendarAddress values used to RSVP.
+- **`identity.list`** (CLI only: `list_identities` / `letterdog identity list`, confirm: none) — List the account's mail sending identities (Identity/get) and calendar participant identities (ParticipantIdentity/get) — the from-addresses available to send_email/reply and the calendarAddress values used to RSVP.
 
 ### mail
-
-- **`mail.search`** (MCP + CLI: `search_emails` / `letterdog mail search`, confirm: none) — Search
-  the user's personal self-hosted mailbox (JMAP).
-- **`mail.read`** (MCP + CLI: `read_emails` / `letterdog mail read`, confirm: none) — Read one or
-  more emails by id (batch-first: pass an ids array).
-- **`mail.thread`** (MCP + CLI: `read_thread` / `letterdog mail thread`, confirm: none) — Read the
-  full conversation for a message.
-- **`mail.export`** (CLI only: `export_emails` / `letterdog mail export`, confirm: none) — Export
-  emails as raw RFC822 .eml files to a local directory (CLI-only; raw fidelity, bytes never enter
-  model context).
-- **`mail.import`** (CLI only: `import_emails` / `letterdog mail import`, confirm: none) — Import
-  local .eml (RFC822) files into a mailbox via Email/import (CLI-only).
-- **`mail.reply`** (MCP + CLI: `reply_email` / `letterdog mail reply`, confirm: outward) — Reply to
-  an email on the user's personal self-hosted mail (Letterdog).
-- **`mail.send`** (MCP + CLI: `send_email` / `letterdog mail send`, confirm: outward) — Compose and
-  send a new email, or submit an existing draft (draft_id), on the user's personal self-hosted mail
-  (Letterdog).
-- **`mail.cancel_send`** (MCP + CLI: `cancel_send` / `letterdog mail cancel_send`, confirm: none) —
-  Cancel a still-pending email submission on the user's personal self-hosted mail (Letterdog) by
-  flipping its undoStatus to canceled — use the submission_id returned by send_email while the
-  delayed-send window is open.
-- **`mail.forward`** (MCP + CLI: `forward_emails` / `letterdog mail forward`, confirm: outward) —
-  Forward one or more emails from the user's personal self-hosted mail (Letterdog) to new
-  recipients.
-- **`mail.organize`** (MCP + CLI: `organize_emails` / `letterdog mail organize`, confirm: none) —
-  Organize emails in the user's personal mailbox (Letterdog / self-hosted JMAP): add/remove mailbox
-  labels, add/remove keywords, and sugar for mark (read/unread/flagged/unflagged/junk/not_junk) and
-  move_to (archive/trash/inbox/<mailbox_id>).
-- **`mail.delete`** (MCP + CLI: `delete_emails` / `letterdog mail delete`, confirm: destructive) —
-  Delete emails from the user's personal mailbox (Letterdog / self-hosted JMAP).
+- **`mail.search`** (MCP + CLI: `search_emails` / `letterdog mail search`, confirm: none) — Search the user's personal self-hosted mailbox (JMAP).
+- **`mail.read`** (MCP + CLI: `read_emails` / `letterdog mail read`, confirm: none) — Read one or more emails by id (batch-first: pass an ids array).
+- **`mail.thread`** (MCP + CLI: `read_thread` / `letterdog mail thread`, confirm: none) — Read the full conversation for a message.
+- **`mail.export`** (CLI only: `export_emails` / `letterdog mail export`, confirm: none) — Export emails as raw RFC822 .eml files to a local directory (CLI-only; raw fidelity, bytes never enter model context).
+- **`mail.import`** (CLI only: `import_emails` / `letterdog mail import`, confirm: none) — Import local .eml (RFC822) files into a mailbox via Email/import (CLI-only).
+- **`mail.reply`** (MCP + CLI: `reply_email` / `letterdog mail reply`, confirm: outward) — Reply to an email on the user's personal self-hosted mail (Letterdog).
+- **`mail.send`** (MCP + CLI: `send_email` / `letterdog mail send`, confirm: outward) — Compose and send a new email, or submit an existing draft (draft_id), on the user's personal self-hosted mail (Letterdog).
+- **`mail.cancel_send`** (MCP + CLI: `cancel_send` / `letterdog mail cancel_send`, confirm: none) — Cancel a still-pending email submission on the user's personal self-hosted mail (Letterdog) by flipping its undoStatus to canceled — use the submission_id returned by send_email while the delayed-send window is open.
+- **`mail.forward`** (MCP + CLI: `forward_emails` / `letterdog mail forward`, confirm: outward) — Forward one or more emails from the user's personal self-hosted mail (Letterdog) to new recipients.
+- **`mail.organize`** (MCP + CLI: `organize_emails` / `letterdog mail organize`, confirm: none) — Organize emails in the user's personal mailbox (Letterdog / self-hosted JMAP): add/remove mailbox labels, add/remove keywords, and sugar for mark (read/unread/flagged/unflagged/junk/not_junk) and move_to (archive/trash/inbox/<mailbox_id>).
+- **`mail.delete`** (MCP + CLI: `delete_emails` / `letterdog mail delete`, confirm: destructive) — Delete emails from the user's personal mailbox (Letterdog / self-hosted JMAP).
 
 ### attachment
-
-- **`attachment.read`** (MCP + CLI: `read_attachment` / `letterdog attachment read`, confirm: none)
-  — Read an email attachment.
-- **`attachment.save`** (CLI only: `save_attachment` / `letterdog attachment save`, confirm: none) —
-  Save email attachment(s) to local disk (CLI-only; bytes never enter model context).
+- **`attachment.read`** (MCP + CLI: `read_attachment` / `letterdog attachment read`, confirm: none) — Read an email attachment.
+- **`attachment.save`** (CLI only: `save_attachment` / `letterdog attachment save`, confirm: none) — Save email attachment(s) to local disk (CLI-only; bytes never enter model context).
 
 ### draft
-
-- **`draft.list`** (CLI only: `list_drafts` / `letterdog draft list`, confirm: none) — List draft
-  emails (messages with the $draft keyword) on the user's personal self-hosted mail (Letterdog).
-- **`draft.create`** (CLI only: `create_draft` / `letterdog draft create`, confirm: none) — Create a
-  draft email (stored in Drafts with the $draft keyword; NOT sent) on the user's personal
-  self-hosted mail (Letterdog).
-- **`draft.update`** (CLI only: `update_draft` / `letterdog draft update`, confirm: none) — Replace
-  a draft email on the user's personal self-hosted mail (Letterdog).
-- **`draft.delete`** (CLI only: `delete_draft` / `letterdog draft delete`, confirm: none) — Delete
-  draft email(s) on the user's personal self-hosted mail (Letterdog) by destroying them outright
-  (drafts are reversible-class — an unsent draft has no recall value).
+- **`draft.list`** (CLI only: `list_drafts` / `letterdog draft list`, confirm: none) — List draft emails (messages with the $draft keyword) on the user's personal self-hosted mail (Letterdog).
+- **`draft.create`** (CLI only: `create_draft` / `letterdog draft create`, confirm: none) — Create a draft email (stored in Drafts with the $draft keyword; NOT sent) on the user's personal self-hosted mail (Letterdog).
+- **`draft.update`** (CLI only: `update_draft` / `letterdog draft update`, confirm: none) — Replace a draft email on the user's personal self-hosted mail (Letterdog).
+- **`draft.delete`** (CLI only: `delete_draft` / `letterdog draft delete`, confirm: none) — Delete draft email(s) on the user's personal self-hosted mail (Letterdog) by destroying them outright (drafts are reversible-class — an unsent draft has no recall value).
 
 ### vacation
-
-- **`vacation.get`** (CLI only: `get_vacation` / `letterdog vacation get`, confirm: none) — Read the
-  vacation / out-of-office auto-reply (the account's VacationResponse singleton) on the user's
-  personal self-hosted mail (Letterdog): whether it's enabled, its active window
-  (from_date/to_date), and the subject/body.
-- **`vacation.set`** (CLI only: `set_vacation` / `letterdog vacation set`, confirm: outward) —
-  Enable, disable, or update the vacation / out-of-office auto-reply on the user's personal
-  self-hosted mail (Letterdog).
+- **`vacation.get`** (CLI only: `get_vacation` / `letterdog vacation get`, confirm: none) — Read the vacation / out-of-office auto-reply (the account's VacationResponse singleton) on the user's personal self-hosted mail (Letterdog): whether it's enabled, its active window (from_date/to_date), and the subject/body.
+- **`vacation.set`** (CLI only: `set_vacation` / `letterdog vacation set`, confirm: outward) — Enable, disable, or update the vacation / out-of-office auto-reply on the user's personal self-hosted mail (Letterdog).
 
 ### mailbox
-
-- **`mailbox.list`** (CLI only: `list_mailboxes` / `letterdog mailbox list`, confirm: none) — List
-  the mailboxes (folders/labels) of the user's personal JMAP account, with roles, parent ids, and
-  message counts.
-- **`mailbox.create`** (CLI only: `create_mailbox` / `letterdog mailbox create`, confirm: none) —
-  Create a mailbox (folder/label) in the user's personal JMAP account.
-- **`mailbox.rename`** (CLI only: `rename_mailbox` / `letterdog mailbox rename`, confirm: none) —
-  Rename a mailbox in the user's personal JMAP account (and/or reparent it via parent_id — null
-  moves it to the top level — or change its sort order).
-- **`mailbox.delete`** (CLI only: `delete_mailbox` / `letterdog mailbox delete`, confirm:
-  destructive) — Delete mailbox(es) from the user's personal JMAP account.
+- **`mailbox.list`** (CLI only: `list_mailboxes` / `letterdog mailbox list`, confirm: none) — List the mailboxes (folders/labels) of the user's personal JMAP account, with roles, parent ids, and message counts.
+- **`mailbox.create`** (CLI only: `create_mailbox` / `letterdog mailbox create`, confirm: none) — Create a mailbox (folder/label) in the user's personal JMAP account.
+- **`mailbox.rename`** (CLI only: `rename_mailbox` / `letterdog mailbox rename`, confirm: none) — Rename a mailbox in the user's personal JMAP account (and/or reparent it via parent_id — null moves it to the top level — or change its sort order).
+- **`mailbox.delete`** (CLI only: `delete_mailbox` / `letterdog mailbox delete`, confirm: destructive) — Delete mailbox(es) from the user's personal JMAP account.
 
 ### calendar
-
-- **`calendar.list`** (MCP + CLI: `list_calendars` / `letterdog calendar list`, confirm: none) —
-  List the user's calendars (their personal JMAP calendar account).
-- **`calendar.availability`** (MCP + CLI: `get_availability` / `letterdog calendar availability`,
-  confirm: none) — Get free/busy availability for people over a UTC window, for scheduling.
-- **`calendar.create`** (CLI only: `create_calendar` / `letterdog calendar create`, confirm: none) —
-  Create a calendar in the user's calendar account.
-- **`calendar.update`** (CLI only: `update_calendar` / `letterdog calendar update`, confirm: none) —
-  Update a calendar's per-user properties (name, color, description, timeZone, sortOrder,
-  subscription/visibility, includeInAvailability).
-- **`calendar.delete`** (CLI only: `delete_calendar` / `letterdog calendar delete`, confirm:
-  destructive) — Delete a calendar.
-- **`calendar.share`** (CLI only: `share_calendar` / `letterdog calendar share`, confirm: blast) —
-  Change who a calendar is shared with (its shareWith ACL).
-- **`calendar.identity_set`** (CLI only: `set_participant_identity` /
-  `letterdog calendar identity_set`, confirm: none) — Create or update one of the user's participant
-  identities — the calendar addresses that identify them as an event participant (used to match
-  invitations for respond_to_event).
+- **`calendar.list`** (MCP + CLI: `list_calendars` / `letterdog calendar list`, confirm: none) — List the user's calendars (their personal JMAP calendar account).
+- **`calendar.availability`** (MCP + CLI: `get_availability` / `letterdog calendar availability`, confirm: none) — Get free/busy availability for people over a UTC window, for scheduling.
+- **`calendar.create`** (CLI only: `create_calendar` / `letterdog calendar create`, confirm: none) — Create a calendar in the user's calendar account.
+- **`calendar.update`** (CLI only: `update_calendar` / `letterdog calendar update`, confirm: none) — Update a calendar's per-user properties (name, color, description, timeZone, sortOrder, subscription/visibility, includeInAvailability).
+- **`calendar.delete`** (CLI only: `delete_calendar` / `letterdog calendar delete`, confirm: destructive) — Delete a calendar.
+- **`calendar.share`** (CLI only: `share_calendar` / `letterdog calendar share`, confirm: blast) — Change who a calendar is shared with (its shareWith ACL).
+- **`calendar.identity_set`** (CLI only: `set_participant_identity` / `letterdog calendar identity_set`, confirm: none) — Create or update one of the user's participant identities — the calendar addresses that identify them as an event participant (used to match invitations for respond_to_event).
 
 ### event
-
-- **`event.search`** (MCP + CLI: `search_events` / `letterdog event search`, confirm: none) — Search
-  the user's calendar events with a typed filter.
-- **`event.read`** (MCP + CLI: `read_events` / `letterdog event read`, confirm: none) — Read full
-  calendar events by id — accepts base event ids AND synthetic per-occurrence ids from
-  search_events(expand:true).
-- **`event.create`** (MCP + CLI: `create_events` / `letterdog event create`, confirm: outward) —
-  Create one or more calendar events.
-- **`event.update`** (MCP + CLI: `update_event` / `letterdog event update`, confirm: outward) —
-  Update ONE event.
-- **`event.delete`** (MCP + CLI: `delete_events` / `letterdog event delete`, confirm: destructive) —
-  Delete calendar events by id.
-- **`event.rsvp`** (MCP + CLI: `respond_to_event` / `letterdog event rsvp`, confirm: outward) — RSVP
-  to an event invitation on the user's calendar.
+- **`event.search`** (MCP + CLI: `search_events` / `letterdog event search`, confirm: none) — Search the user's calendar events with a typed filter.
+- **`event.read`** (MCP + CLI: `read_events` / `letterdog event read`, confirm: none) — Read full calendar events by id — accepts base event ids AND synthetic per-occurrence ids from search_events(expand:true).
+- **`event.create`** (MCP + CLI: `create_events` / `letterdog event create`, confirm: outward) — Create one or more calendar events from full RFC 8984 JSCalendar bodies — the schema is the whole spec, not just basics: recurrenceRules (byDay/byMonthDay/bySetPosition for 'last Friday monthly', count/until, non-Gregorian rscale, skip) plus recurrenceOverrides to add/skip/reshape single occurrences; alerts (offset or absolute triggers); multiple locations (relativeTo start/end + per-location timeZone for travel legs) and virtualLocations (video-call URIs); links/attachments; all-day (showWithoutTime), floating time (timeZone null), freeBusyStatus, privacy, priority, color, keywords; utcStart/utcEnd write shortcut.
+- **`event.update`** (MCP + CLI: `update_event` / `letterdog event update`, confirm: outward) — Update ONE event.
+- **`event.delete`** (MCP + CLI: `delete_events` / `letterdog event delete`, confirm: destructive) — Delete calendar events by id.
+- **`event.rsvp`** (MCP + CLI: `respond_to_event` / `letterdog event rsvp`, confirm: outward) — RSVP to an event invitation on the user's calendar.
 
 ### people
-
-- **`people.search`** (MCP + CLI: `search_people` / `letterdog people search`, confirm: none) —
-  Letterdog (the user's personal self-hosted contacts + directory).
+- **`people.search`** (MCP + CLI: `search_people` / `letterdog people search`, confirm: none) — Letterdog (the user's personal self-hosted contacts + directory).
 
 ### contact
-
-- **`contact.read`** (MCP + CLI: `read_contacts` / `letterdog contact read`, confirm: none) — Read
-  full JSContact contact cards by id from Letterdog's address book.
-- **`contact.search`** (CLI only: `search_contacts` / `letterdog contact search`, confirm: none) —
-  Search Letterdog's JSContact address book only (no principals) with a typed ContactCard/query
-  filter.
+- **`contact.read`** (MCP + CLI: `read_contacts` / `letterdog contact read`, confirm: none) — Read full JSContact contact cards by id from Letterdog's address book.
+- **`contact.search`** (CLI only: `search_contacts` / `letterdog contact search`, confirm: none) — Search Letterdog's JSContact address book only (no principals) with a typed ContactCard/query filter.
 
 ### blob
-
-- **`blob.upload`** (CLI only: `upload_blob` / `letterdog blob upload`, confirm: none) — Upload
-  bytes to Letterdog's JMAP blob store and get back a {blob_id, type, size}.
-- **`blob.download`** (CLI only: `download_blob` / `letterdog blob download`, confirm: none) —
-  Download a blob from Letterdog by blobId.
-- **`blob.lookup`** (CLI only: `lookup_blob` / `letterdog blob lookup`, confirm: none) — RFC 9404
-  Blob/lookup: given blobIds, report which typed objects reference them (per type_names).
+- **`blob.upload`** (CLI only: `upload_blob` / `letterdog blob upload`, confirm: none) — Upload bytes to Letterdog's JMAP blob store and get back a {blob_id, type, size}.
+- **`blob.download`** (CLI only: `download_blob` / `letterdog blob download`, confirm: none) — Download a blob from Letterdog by blobId.
+- **`blob.lookup`** (CLI only: `lookup_blob` / `letterdog blob lookup`, confirm: none) — RFC 9404 Blob/lookup: given blobIds, report which typed objects reference them (per type_names).
 
 ### file
-
-- **`file.list`** (CLI only: `list_files` / `letterdog file list`, confirm: none) — List FileNode
-  entries (Letterdog's JMAP file storage, urn:ietf:params:jmap:filenode).
+- **`file.list`** (CLI only: `list_files` / `letterdog file list`, confirm: none) — List FileNode entries (Letterdog's JMAP file storage, urn:ietf:params:jmap:filenode).
 
 ### notify
-
-- **`notify.list`** (CLI only: `list_notifications` / `letterdog notify list`, confirm: none) — List
-  Letterdog calendar/share notifications (incoming invites, reschedules, cancellations, share
-  grants).
-- **`notify.dismiss`** (CLI only: `dismiss_notifications` / `letterdog notify dismiss`, confirm:
-  none) — Dismiss (permanently remove) calendar/share notifications by id — the follow-up to
-  list_notifications once you have acted on them.
+- **`notify.list`** (CLI only: `list_notifications` / `letterdog notify list`, confirm: none) — List Letterdog calendar/share notifications (incoming invites, reschedules, cancellations, share grants).
+- **`notify.dismiss`** (CLI only: `dismiss_notifications` / `letterdog notify dismiss`, confirm: none) — Dismiss (permanently remove) calendar/share notifications by id — the follow-up to list_notifications once you have acted on them.
 
 ### alert
-
-- **`alert.ack`** (CLI only: `ack_alert` / `letterdog alert ack`, confirm: none) — Acknowledge a
-  calendar event alert (mark a reminder as seen) by setting its `acknowledged` timestamp on the BASE
-  event via a JSON-Pointer patch.
-- **`alert.snooze`** (CLI only: `snooze_alert` / `letterdog alert snooze`, confirm: none) — Snooze a
-  calendar event alert: acknowledge the original reminder and add a new alert with an
-  AbsoluteTrigger at `until`, linked back to the original via relatedTo (relation "snooze").
+- **`alert.ack`** (CLI only: `ack_alert` / `letterdog alert ack`, confirm: none) — Acknowledge a calendar event alert (mark a reminder as seen) by setting its `acknowledged` timestamp on the BASE event via a JSON-Pointer patch.
+- **`alert.snooze`** (CLI only: `snooze_alert` / `letterdog alert snooze`, confirm: none) — Snooze a calendar event alert: acknowledge the original reminder and add a new alert with an AbsoluteTrigger at `until`, linked back to the original via relatedTo (relation "snooze").
 
 ### dav
-
-- **`dav.discover`** (CLI only: `dav_discover` / `letterdog dav discover`, confirm: none) — Discover
-  the CalDAV principal, calendar homes, and advertised DAV features (via cdav-library).
-- **`dav.list`** (CLI only: `dav_list` / `letterdog dav list`, confirm: none) — List CalDAV calendar
-  collections, or the objects inside one collection (calendar_path).
-- **`dav.get`** (CLI only: `dav_get` / `letterdog dav get`, confirm: none) — Read the raw iCalendar
-  text and ETag for one CalDAV resource by href.
-- **`dav.put`** (CLI only: `dav_put` / `letterdog dav put`, confirm: blast) — Create or replace a
-  raw CalDAV iCalendar resource with PUT (byte-exact fidelity).
-- **`dav.delete`** (CLI only: `dav_delete` / `letterdog dav delete`, confirm: destructive) — Delete
-  a raw CalDAV resource by href.
+- **`dav.discover`** (CLI only: `dav_discover` / `letterdog dav discover`, confirm: none) — Discover the CalDAV principal, calendar homes, and advertised DAV features (via cdav-library).
+- **`dav.list`** (CLI only: `dav_list` / `letterdog dav list`, confirm: none) — List CalDAV calendar collections, or the objects inside one collection (calendar_path).
+- **`dav.get`** (CLI only: `dav_get` / `letterdog dav get`, confirm: none) — Read the raw iCalendar text and ETag for one CalDAV resource by href.
+- **`dav.put`** (CLI only: `dav_put` / `letterdog dav put`, confirm: blast) — Create or replace a raw CalDAV iCalendar resource with PUT (byte-exact fidelity).
+- **`dav.delete`** (CLI only: `dav_delete` / `letterdog dav delete`, confirm: destructive) — Delete a raw CalDAV resource by href.
 
 ### admin
-
-- **`admin.settings_get`** (CLI only: `get_admin_settings` / `letterdog admin settings_get`,
-  confirm: none) — Read Stalwart server settings (admin surface). Registered only when
-  `ENABLE_ADMIN_TOOLS=true`.
-- **`admin.settings_update`** (CLI only: `update_admin_settings` /
-  `letterdog admin settings_update`, confirm: blast) — Change Stalwart server settings (admin
-  surface) — set and/or unset keys. Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`admin.settings_get`** (CLI only: `get_admin_settings` / `letterdog admin settings_get`, confirm: none) — Read Stalwart server settings (admin surface). Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`admin.settings_update`** (CLI only: `update_admin_settings` / `letterdog admin settings_update`, confirm: blast) — Change Stalwart server settings (admin surface) — set and/or unset keys. Registered only when `ENABLE_ADMIN_TOOLS=true`.
 
 ### sieve
-
-- **`sieve.list`** (CLI only: `list_sieve_scripts` / `letterdog sieve list`, confirm: none) — List
-  all Sieve filter scripts (name, id, isActive) via SieveScript/get. Registered only when
-  `ENABLE_ADMIN_TOOLS=true`.
-- **`sieve.get`** (CLI only: `get_sieve_script` / `letterdog sieve get`, confirm: none) — Fetch full
-  Sieve script(s) by id, including the script body/blob. Registered only when
-  `ENABLE_ADMIN_TOOLS=true`.
-- **`sieve.put`** (CLI only: `put_sieve_script` / `letterdog sieve put`, confirm: blast) — Create or
-  replace a Sieve filter script (uploads the source as a blob, then SieveScript/set). Registered
-  only when `ENABLE_ADMIN_TOOLS=true`.
-- **`sieve.activate`** (CLI only: `activate_sieve_script` / `letterdog sieve activate`, confirm:
-  blast) — Activate a Sieve script (or pass id:null to deactivate filtering) via SieveScript/set
-  onSuccessActivateScript. Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`sieve.list`** (CLI only: `list_sieve_scripts` / `letterdog sieve list`, confirm: none) — List all Sieve filter scripts (name, id, isActive) via SieveScript/get. Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`sieve.get`** (CLI only: `get_sieve_script` / `letterdog sieve get`, confirm: none) — Fetch full Sieve script(s) by id, including the script body/blob. Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`sieve.put`** (CLI only: `put_sieve_script` / `letterdog sieve put`, confirm: blast) — Create or replace a Sieve filter script (uploads the source as a blob, then SieveScript/set). Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`sieve.activate`** (CLI only: `activate_sieve_script` / `letterdog sieve activate`, confirm: blast) — Activate a Sieve script (or pass id:null to deactivate filtering) via SieveScript/set onSuccessActivateScript. Registered only when `ENABLE_ADMIN_TOOLS=true`.
 
 ### sync
-
-- **`sync.changes`** (CLI only: `sync_changes` / `letterdog sync changes`, confirm: none) —
-  Foo/changes: what created/updated/destroyed since a state string, for local mirroring. Registered
-  only when `ENABLE_SYNC_TOOLS=true`.
-- **`sync.query_changes`** (CLI only: `sync_query_changes` / `letterdog sync query_changes`,
-  confirm: none) — Foo/queryChanges: how a query result set shifted since a queryState —
-  added/removed ids for an incremental view. Registered only when `ENABLE_SYNC_TOOLS=true`.
+- **`sync.changes`** (CLI only: `sync_changes` / `letterdog sync changes`, confirm: none) — Foo/changes: what created/updated/destroyed since a state string, for local mirroring. Registered only when `ENABLE_SYNC_TOOLS=true`.
+- **`sync.query_changes`** (CLI only: `sync_query_changes` / `letterdog sync query_changes`, confirm: none) — Foo/queryChanges: how a query result set shifted since a queryState — added/removed ids for an incremental view. Registered only when `ENABLE_SYNC_TOOLS=true`.
 
 ### raw
+- **`raw.jmap`** (MCP + CLI: `jmap_call` / `letterdog raw jmap`, confirm: blast) — Escape hatch: run an arbitrary JMAP request against Letterdog when no curated tool fits.
 
-- **`raw.jmap`** (MCP + CLI: `jmap_call` / `letterdog raw jmap`, confirm: blast) — Escape hatch: run
-  an arbitrary JMAP request against Letterdog when no curated tool fits.

@@ -507,8 +507,14 @@ const createEvents = defineOp({
   name: "event.create",
   mcpName: "create_events",
   description:
-    "Create one or more calendar events. Provide typed JSCalendar event bodies (title, start as " +
-    "LocalDateTime + time_zone, duration, participants, recurrenceRules, alerts…); server-set " +
+    "Create one or more calendar events from full RFC 8984 JSCalendar bodies — the schema is the " +
+    "whole spec, not just basics: recurrenceRules (byDay/byMonthDay/bySetPosition for 'last " +
+    "Friday monthly', count/until, non-Gregorian rscale, skip) plus recurrenceOverrides to " +
+    "add/skip/reshape single occurrences; alerts (offset or absolute triggers); multiple " +
+    "locations (relativeTo start/end + per-location timeZone for travel legs) and " +
+    "virtualLocations (video-call URIs); links/attachments; all-day (showWithoutTime), floating " +
+    "time (timeZone null), freeBusyStatus, privacy, priority, color, keywords; utcStart/utcEnd " +
+    "write shortcut. `start` is wall-clock LocalDateTime interpreted in timeZone. Server-set " +
     "props (id/uid/created/…) are rejected. send_invitations (default false) controls iTIP: true " +
     "emails every participant an invitation, false creates the event WITHOUT notifying anyone — " +
     "pick deliberately. Confirmation is only required when send_invitations is true. Use is_draft " +
@@ -606,8 +612,9 @@ const updateEventInput = {
   /** Convenience typed patch fields (mutually usable with `patch` — `patch` wins on conflict). */
   ...eventPatchFieldsInput,
   /**
-   * Raw JSCalendar PatchObject (JSON-Pointer keys with implicit leading `/`, null = remove;
-   * pointers MUST NOT reference inside arrays; intermediate objects must already exist). Advanced.
+   * JSCalendar PatchObject reaching any writable RFC 8984 property (JSON-Pointer keys with
+   * implicit leading `/`, null = remove; pointers MUST NOT reference inside arrays — replace the
+   * array wholesale; intermediate objects must already exist).
    */
   patch: PatchObjectSchema.optional(),
   /** Send iTIP updates to participants after the change (REQUEST if origin, else REPLY). */
@@ -623,10 +630,15 @@ const updateEvent = defineOp({
   description:
     "Update ONE event. Target a base event id to change the whole series, OR a synthetic " +
     "per-occurrence id from search_events(expand:true) to change just that occurrence (the " +
-    "server records it as a recurrenceOverride — there is no updateScope/destroyScope). Provide " +
-    "convenience fields (title/start/duration/time_zone/location/description/status) and/or a raw " +
-    "JSCalendar `patch` (JSON-Pointer keys, null removes). send_updates emails participants; " +
-    "without it, scheduled attendees silently desync. Confirmation applies only when messaging.",
+    "server records it as a recurrenceOverride — there is no updateScope/destroyScope). " +
+    "Convenience fields cover the basics; `patch` reaches EVERY writable RFC 8984 property — " +
+    "recurrenceRules, recurrenceOverrides, alerts, locations/virtualLocations, links, " +
+    "participants (deep pointers like participants/<id>/participationStatus), showWithoutTime, " +
+    "freeBusyStatus, privacy, color, keywords — as JSON-Pointer keys, null removes. Time-zone " +
+    "footgun: `start` is wall-clock in time_zone, so patching time_zone alone SHIFTS the actual " +
+    "instant; to relabel the zone keeping the same moment, convert start in the same call. " +
+    "send_updates emails participants; without it, scheduled attendees silently desync. " +
+    "Confirmation applies only when messaging.",
   input: updateEventInput,
   annotations: { idempotent: true },
   confirmClass: "outward",

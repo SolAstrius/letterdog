@@ -67,14 +67,28 @@ freeBusy-only shares are invisible in `list_calendars` ("not listed" does not me
 
 ## Mutations
 
-- `create_events`: typed JSCalendar bodies (title, `start` LocalDateTime + `timeZone`, `duration`,
-  participants, recurrenceRules, alerts). `send_invitations` (default false) controls iTIP both
-  ways: true emails every participant an invitation; false creates silently — pick deliberately.
-  `is_draft` stages with no scheduling side effects.
+- `create_events`: full RFC 8984 JSCalendar bodies — the whole spec is writable, not just title +
+  start + duration. Available and worth using when they fit the ask: `recurrenceRules` (byDay with
+  nthOfPeriod for "last Friday monthly", byMonthDay/bySetPosition, count/until, non-Gregorian
+  `rscale` with leap-month byMonth and `skip` for "31st of every month"), `recurrenceOverrides`
+  (add/skip/reshape single occurrences at create time), `alerts` (OffsetTrigger "-PT15M" or
+  AbsoluteTrigger), multiple `locations` (with `relativeTo: start/end` + per-location `timeZone`
+  for travel legs — one event, departure and arrival zones), `virtualLocations` (video-call URI +
+  features), `links` (attachments incl. blobId), all-day (`showWithoutTime` + P1D), floating time
+  (`timeZone: null` — 7am wherever the user is), `freeBusyStatus: free`, `privacy`, `priority`,
+  `color`, `keywords`, `descriptionContentType: text/html`, `utcStart`/`utcEnd` write shortcut.
+  `send_invitations` (default false) controls iTIP both ways: true emails every participant an
+  invitation; false creates silently — pick deliberately. `is_draft` stages with no scheduling
+  side effects.
 - `update_event`: convenience fields (title/start/duration/time_zone/location/description/status)
-  and/or a raw JSCalendar `patch` (JSON-Pointer keys, null removes). `send_updates` emails
-  participants — without it, scheduled attendees silently desync; set it whenever attendees exist
-  and the change is visible to them.
+  for the basics; the `patch` arg reaches every writable property above via JSON-Pointer keys
+  (null removes) — e.g. `"alerts": {...}` to add reminders, `"participants/<id>/expectReply": true`,
+  `"recurrenceRules"` to make an existing event recur. Time-zone footgun: `start` is wall-clock
+  interpreted in `time_zone`, so patching `time_zone` alone rebases the wall time and SHIFTS the
+  event's absolute instant — an instant-preserving relabel must convert `start` into the new zone
+  in the same call (16:00 Etc/UTC → 19:00 Europe/Moscow). `send_updates` emails participants —
+  without it, scheduled attendees silently desync; set it whenever attendees exist and the change
+  is visible to them.
 - `delete_events`: `send_cancellations` for iTIP CANCEL. Destructive — always two-phase.
 - `respond_to_event`: status accepted/declined/tentative; matches the user's own participant entry
   via their ParticipantIdentity calendarAddress. `notify_organizer` defaults true (iTIP REPLY).
