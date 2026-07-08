@@ -3,6 +3,6 @@
   "description": "Letterdog — the user's personal self-hosted mail, calendar, and contacts (JMAP). Curated MCP tools plus the full-coverage letterdog CLI and workflow skills.",
   "version": "2.0.0",
   "author": { "name": "Sol Astrius Phoenix", "email": "me@danielsol.dev" },
-  "repository": "https://github.com/solastrius/stalwart-jmap-mcp",
+  "repository": "https://github.com/solastrius/letterdog",
   "license": "MIT"
 }
