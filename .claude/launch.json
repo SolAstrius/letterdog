@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sundog-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/sol/repos/own/infra/sundog && STALWART_BEARER=\"$(launchctl getenv STALWART_BEARER)\" deno task dev"
+      ],
+      "port": 5173
+    }
+  ]
+}
