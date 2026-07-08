@@ -123,12 +123,21 @@ Untested (probe scope): `#creationId` form of `onSuccessActivateScript`; Vacatio
 script visibility (§4 — no vacation script existed); `tooLarge`/`overQuota` errors; ManageSieve
 co-access.
 
-## 7. Letterdog op-surface mapping (as of 841830c)
+## 7. Letterdog op-surface mapping
 
-Existing CLI-only ops (registered under `ENABLE_ADMIN_TOOLS`): `sieve.list`, `sieve.get`,
-`sieve.put` (uploads via the HTTP upload endpoint — separate request, so quirk #3 doesn't bite),
-`sieve.activate` (id or null ⇒ deactivate; note it passes `onSuccessActivateScript: null` for
-deactivation, but the spec says an omitted/invalid id MUST be *ignored* — the correct deactivation
-arg is `onSuccessDeactivateScript: true`. Suspected no-op; not live-verified).
-**Gaps**: no `sieve.delete` (destroy requires the deactivate-first dance) and no `sieve.validate`
-op — both currently require raw `jmap_call`.
+CLI-only ops (registered under `ENABLE_ADMIN_TOOLS`), all live-verified 2026-07-09 via
+`deno task cli -- sieve …` against account `b`:
+
+- `sieve.list` / `sieve.get` — LISTSCRIPTS/GETSCRIPT equivalents.
+- `sieve.put` — uploads via the HTTP upload endpoint (separate request, so quirk #3 doesn't bite).
+- `sieve.activate` — `--id <id>` activates; `--deactivate` disables filtering via
+  `onSuccessDeactivateScript: true`. (The op used to send `onSuccessActivateScript: null` for
+  deactivation — a spec no-op per the MUST-ignore rule, fixed + verified. A CLI `--id null` would
+  be the *string* "null", equally ignored, hence the dedicated flag.) Because of quirk #2 the op
+  re-reads all scripts after the /set and returns their `isActive` states.
+- `sieve.delete` — destroy by ids; `--deactivate-first` handles the active-script guard by
+  deactivating in a separate /set call (spec requirement) and retrying, matching BOTH
+  `sieveIsActive` and `scriptIsActive` (verified: guard fires without the flag, retry destroys
+  with it).
+- `sieve.validate` — uploads source, runs SieveScript/validate; returns `{valid, error}`.
+  Grammar-only on Stalwart (quirk #4).

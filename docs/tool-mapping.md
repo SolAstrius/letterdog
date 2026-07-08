@@ -8,7 +8,7 @@ One op registry (`src/core/ops/`), two surfaces:
 - **MCP** (deployed at `https://mcp.mail.astrius.ink/mcp`): the 22 curated
   everyday tools below. Auth: per-request `Authorization` header, forwarded verbatim to the
   JMAP server.
-- **CLI** (`letterdog`): every op, including the 41 CLI-only ones. Auth:
+- **CLI** (`letterdog`): every op, including the 43 CLI-only ones. Auth:
   `STALWART_BEARER` env (or `--bearer-env NAME`), plus `--url` / `--account` overrides.
 
 Confirmation classes (`CONFIRM_POLICY` = strict | balanced | minimal; see
@@ -44,7 +44,7 @@ Confirmation classes (`CONFIRM_POLICY` = strict | balanced | minimal; see
 | `read_contacts` | `contact.read` | `letterdog contact read` | none | contact | read-only |
 | `jmap_call` | `raw.jmap` | `letterdog raw jmap` | blast | raw | destructive |
 
-## CLI-only ops (41)
+## CLI-only ops (43)
 
 | CLI command | Op | MCP alias | Confirm | Projection | Capabilities |
 | --- | --- | --- | --- | --- | --- |
@@ -87,6 +87,8 @@ Confirmation classes (`CONFIRM_POLICY` = strict | balanced | minimal; see
 | `letterdog sieve get` | `sieve.get` | (`get_sieve_script`) | none | raw | read-only |
 | `letterdog sieve put` | `sieve.put` | (`put_sieve_script`) | blast | raw | — |
 | `letterdog sieve activate` | `sieve.activate` | (`activate_sieve_script`) | blast | raw | idempotent |
+| `letterdog sieve delete` | `sieve.delete` | (`delete_sieve_script`) | destructive | raw | destructive, idempotent |
+| `letterdog sieve validate` | `sieve.validate` | (`validate_sieve_script`) | none | raw | read-only |
 | `letterdog sync changes` | `sync.changes` | (`sync_changes`) | none | raw | read-only |
 | `letterdog sync query_changes` | `sync.query_changes` | (`sync_query_changes`) | none | raw | read-only |
 
@@ -186,7 +188,9 @@ Confirmation classes (`CONFIRM_POLICY` = strict | balanced | minimal; see
 - **`sieve.list`** (CLI only: `list_sieve_scripts` / `letterdog sieve list`, confirm: none) — List all Sieve filter scripts (name, id, isActive) via SieveScript/get. Registered only when `ENABLE_ADMIN_TOOLS=true`.
 - **`sieve.get`** (CLI only: `get_sieve_script` / `letterdog sieve get`, confirm: none) — Fetch full Sieve script(s) by id, including the script body/blob. Registered only when `ENABLE_ADMIN_TOOLS=true`.
 - **`sieve.put`** (CLI only: `put_sieve_script` / `letterdog sieve put`, confirm: blast) — Create or replace a Sieve filter script (uploads the source as a blob, then SieveScript/set). Registered only when `ENABLE_ADMIN_TOOLS=true`.
-- **`sieve.activate`** (CLI only: `activate_sieve_script` / `letterdog sieve activate`, confirm: blast) — Activate a Sieve script (or pass id:null to deactivate filtering) via SieveScript/set onSuccessActivateScript. Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`sieve.activate`** (CLI only: `activate_sieve_script` / `letterdog sieve activate`, confirm: blast) — Activate a Sieve script by id (SieveScript/set onSuccessActivateScript), or pass deactivate:true instead to turn filtering off (onSuccessDeactivateScript — RFC 9661 ignores invalid activate ids, so null/'null' would silently do nothing). Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`sieve.delete`** (CLI only: `delete_sieve_script` / `letterdog sieve delete`, confirm: destructive) — Destroy Sieve script(s) by id. Registered only when `ENABLE_ADMIN_TOOLS=true`.
+- **`sieve.validate`** (CLI only: `validate_sieve_script` / `letterdog sieve validate`, confirm: none) — Check Sieve source validity server-side WITHOUT storing a script (SieveScript/validate ≈ ManageSieve CHECKSCRIPT). Registered only when `ENABLE_ADMIN_TOOLS=true`.
 
 ### sync
 - **`sync.changes`** (CLI only: `sync_changes` / `letterdog sync changes`, confirm: none) — Foo/changes: what created/updated/destroyed since a state string, for local mirroring. Registered only when `ENABLE_SYNC_TOOLS=true`.
