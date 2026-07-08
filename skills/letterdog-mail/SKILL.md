@@ -1,178 +1,154 @@
 ---
 name: letterdog-mail
-description: "Manage Letterdog — the user's personal self-hosted mail (Stalwart JMAP; addresses on danielsol.dev, astrius.ink, ashbornlabs.com, and other own domains). Use when the user wants to inspect, search, or summarize mail, triage inbox/junk/marketing, read attachments, draft or send replies, forward, archive, delete, or apply labels/keywords on their own mail server — not Gmail or other hosted accounts."
+description: "Letterdog — the user's personal self-hosted mail/calendar/contacts (JMAP; addresses on danielsol.dev, astrius.ink, ashbornlabs.com, and other own domains). Use when the user wants to inspect, search, or summarize mail, triage inbox/junk/marketing, read attachments, draft or send replies, forward, archive, delete, or apply labels/keywords on their own mail server — not Gmail or other hosted accounts."
 ---
 
 # Letterdog Mail
 
-## Core Flow
+## Tool Surface
 
-Use the Letterdog mail tools when they are available. If the expected tools are missing, report
-that the Letterdog MCP server is not registered or not connected before trying another mailbox
-surface.
+MCP tools for mail: `whoami`, `search_emails`, `read_emails`, `read_thread`, `read_attachment`,
+`reply_email`, `send_email`, `cancel_send`, `forward_emails`, `organize_emails`, `delete_emails`,
+`search_people`, `read_contacts`, and the escape hatch `jmap_call`. If these are missing, report
+that the Letterdog MCP server is not connected before trying another mailbox surface.
 
-Start with `get_mail_profile`, `list_mailboxes`, or `stalwart_session_info` when the account,
-capabilities, identities, mailbox roles, or backend URL matter. Use explicit `account_id` only when
-the user gives one or the session exposes multiple plausible accounts; otherwise let the tools
-resolve the account from the caller's JMAP session.
+Conventions that apply everywhere:
 
-Prefer bounded reads. For broad mailbox analysis, search first, inspect snippets/metadata, then read
-only the bodies or threads that can change the answer.
+- Batch-first. Every id-taking read and uniform mutation takes `ids: string[]` — one call with 20
+  ids, never 20 calls. Singular use = array of one. Accumulate ids from a search, then act once.
+- Every list/read returns the envelope `{items, failed?, not_found?, state?, total?}`. Per-item
+  problems land in `failed: {id: error}` — the call does not throw; check `failed` and `not_found`
+  instead of assuming all-or-nothing.
+- Every read takes `projection: "brief" | "full" | "raw"` (default brief) and `fields: [...]` for
+  surgical extras. Brief is enough for triage; `raw` is the untouched spec shape.
+- Bodies are never included by default. Pass `include_body: true` with
+  `body_as: "text" | "markdown" | "html"` (default text; HTML is converted server-side, 5-20x
+  smaller) and `max_body_bytes` to bound it.
+- `whoami` first when the from-address, identities, capabilities, or account id matter. Pass
+  `account_id` only when the user names one; otherwise the session resolves it.
 
 ## Search And Reading
 
-Prefer `search_emails` for most mailbox tasks because it combines `Email/query` and `Email/get`. Use
-`search_email_ids` when the next operation needs explicit ids, such as labels, archive, delete, or
-batch reads.
+`search_emails` takes a Gmail-syntax `query` (from:/to:/cc:/bcc:/subject:/body:/in:/label:/
+is:unread|flagged|draft/has:attachment/before:/after:/larger:/smaller:/header:; quoted "phrases"
+match as phrases, bare words are all-required tokens, leading `-` negates) and/or a typed RFC 8621
+`filter` — both are AND-merged. TRAP: `before:`/`after:` filter on receivedAt (server arrival time),
+not the Date: header; after: inclusive, before: exclusive.
 
-Good Letterdog search inputs include:
+- `ids_only: true` when the next step is a mutation or batch read — accumulate then act.
+- `collapse_threads: true` for inbox-style views (one email per thread).
+- `include_snippets: true` for `<mark>`-highlighted match context instead of reading bodies.
+- `limit` defaults 25 (max 200); `calculate_total` is opt-in and can be slow.
+- Unsupported query operators are surfaced, not guessed — refine with supported ones.
 
-- Gmail-like query text for supported operators: `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `body:`,
-  `text:`, `has:attachment`, `is:read`, `is:unread`, `is:starred`, `is:draft`, `is:important`,
-  `is:answered`, `is:forwarded`, `in:`, `label:`, `after:`, `before:`, `larger:`, `smaller:`, plus
-  free text.
-- Structured JMAP `filter` when the query is easier to express directly.
-- `sort`, `limit`, `position`, and `collapse_threads` for paging and result shape.
+`read_emails` for metadata/bodies by ids. `read_thread` (by `email_id` or `thread_ids`) resolves a
+whole conversation in one round-trip — use it before replying. `read_attachment` by `email_id` +
+`blob_id` or `part_id` (membership verified): default `mode: "url"` returns an authenticated
+download URL + curl one-liner (bytes never enter context); `mode: "content"` inlines base64 (guard
+with `max_bytes`); `parse: true` parses an attached `.eml`.
 
-Treat `unsupported` search terms in tool results as meaningful. Do not silently claim support for
-Gmail-only features such as categories, filename search, or Gmail smart labels. If unsupported terms
-matter, explain the limitation and refine with supported sender, subject, text, mailbox, date, size,
-attachment, or keyword filters.
+## People
 
-Use small result pages for exploratory reads, usually 10-25 messages. For broad ID-only operations,
-larger pages are acceptable when the user has clearly asked for a bulk action.
+`search_people` resolves a name/email into addresses across the address book AND the principals
+directory — the lookup step before mailing someone ("mail Ivan" resolves here). `read_contacts`
+fetches full JSContact cards by id when phones/orgs/notes matter.
 
-Use `read_email` for one message, `batch_read_emails` for a shortlist, `read_email_thread` when
-conversation context changes the answer, and `batch_read_email_threads` for several known thread
-ids. Use `include_body: true` only when snippets and headers are insufficient. Use
-`include_raw: true` only when MIME source, exact headers, or HTML/layout verification matter.
+## Compose And Send
 
-## Attachments And Raw MIME
+- `reply_email`: RFC-correct threading is handled (In-Reply-To, References, base subject, parent
+  marked `$answered`). `send: false` (default) drafts; `send: true` submits. `reply_all` adds the
+  parent's To+Cc minus the user's own addresses — choose deliberately, not by default.
+- `send_email`: new mail or submit an existing draft (`draft_id`). Attachments accept
+  `{blob_id} | {content_base64, name, type} | {url} | {text, name}`. `send_at` schedules a delayed
+  send; the response carries `submission_id` + `undo_status`.
+- `cancel_send`: flips a still-pending submission to canceled within the undo window; after the
+  message leaves the server it fails with `cannotUnsend` — no recall.
+- `forward_emails`: batch email_ids to new recipients; originals reattached zero-copy as
+  message/rfc822 (full MIME fidelity) unless `attach_original: false` (inline quote).
 
-Read the email first before reading an attachment. Use `read_attachment` with `email_id` plus
-`blob_id` or `part_id`; the tool verifies that the blob belongs to the requested message. Set
-`max_bytes` deliberately and choose `as: "base64"` for binary, `as: "text"` for text-like files, or
-`as: "bytes"` when the caller expects base64 bytes but cares about the byte-count semantics.
+Read the latest message and enough thread context before drafting. If the user asks to reply but not
+explicitly to send, draft (`send: false`). Local files cannot be attached through MCP — route to the
+CLI (below).
 
-For whole-message source, use `read_email` with `include_raw: true`; Stalwart exposes raw MIME via
-the Email `blobId`, not as a Gmail-style raw field.
+## Organize And Delete
 
-## Triage And Mailbox Analysis
+`organize_emails` is the one mutation tool for labels/keywords/marks/moves. Explicit ids only —
+never query-powered. Semantics:
 
-For inbox triage, default to the Inbox-role mailbox and a clear timeframe unless the user asks for a
-broader audit. Use `list_mailboxes` to resolve roles such as Inbox, Junk, Trash, Drafts, Sent, and
-Archive instead of hardcoding mailbox ids.
+- `add_labels`/`remove_labels`: mailbox labels by name, id, or role; additive/subtractive.
+- `add_keywords`/`remove_keywords`: JMAP keywords ($flagged, custom tags).
+- `mark`: sugar for read|unread|flagged|unflagged|junk|not_junk.
+- `move_to`: archive|trash|inbox|<mailbox_id>. REPLACES current mailboxes unless
+  `keep_in_current: true`.
 
-Group results into practical buckets when useful:
+`delete_emails` defaults to a reversible Trash move. `permanent: true` destroys irrecoverably and is
+always two-phase. Sample actual messages before bulk labeling/deleting a broad match set.
 
-- `Urgent`: direct asks with time pressure, blocking messages, decision requests with deadlines, or
-  operational mail that can break if ignored.
-- `Needs reply soon`: direct asks without same-day urgency or active conversations where the user is
-  probably the next responder.
-- `Waiting`: threads where the user already replied or the blocker belongs to someone else.
-- `FYI`: announcements, newsletters, calendar churn, marketing, transactional mail, and low-action
-  notifications.
+## Confirmation
 
-For junk, marketing, newsletter, or cleanup requests, sample actual messages before labeling or
-deleting. Stalwart mailboxes and keywords are explicit state; do not infer that a broad search is
-safe to mutate without inspecting enough examples.
+Most actions run directly: labels, marks, moves INCLUDING trash, archive, drafts. Do not ask the
+user for ritual confirmation on these — the client's own tool prompt is the gate.
 
-State search scope and confidence, especially when scanning a sample rather than the whole mailbox.
-Avoid absolute claims like "the only urgent message" unless the search coverage supports that.
+Only these are two-phase: permanent email destroy, deleting a mailbox that still has mail, share/ACL
+changes, admin/sieve, raw JMAP mutations (`jmap_call` with `allow_mutation`), and query-powered bulk
+over 100 items. Two-phase means the tool returns `confirmation_required: true` + `confirm_token` + a
+brief preview instead of executing; show the preview, then repeat the IDENTICAL call with
+`confirm_token` added. Outward sends (send/reply/forward) may return the same challenge under
+stricter server policies — handle it the same way. Never invent or persist tokens; a mismatch
+returns a diff of what changed.
 
-## Drafting Replies
+## MCP vs CLI Routing
 
-Read the latest message and enough thread context before drafting. Preserve concrete facts from the
-thread: recipients, names, dates, commitments, links, quoted asks, and subject intent.
+Use the MCP tools for reading, triage, replies, and organization. Drop to the CLI binary `letterdog`
+via Bash when the task involves:
 
-If the user asks to reply but does not explicitly ask to send, default to a draft-oriented answer or
-`create_draft_email`. If they clearly ask to send now, use `send_email` or `send_draft_email` with
-the normal confirmation flow.
+- local files — attach from a path, save attachments/raw messages to a path;
+- more than ~20 mutations (pipelines beat repeated tool calls);
+- raw MIME fidelity (export/import .eml);
+- mailbox management, drafts CRUD, vacation response, sieve, admin;
+- anything the MCP surface doesn't wrap.
 
-Use `get_mail_profile` when identities matter. If the sender identity is ambiguous, identify the
-available identities and pick the safest obvious one only when the user's intent is clear.
+CLI auth comes from `STALWART_BEARER` in the environment (launchctl-set on this machine). Shape:
+`letterdog <group> <command> [flags] [ids…|-]` — trailing ids pipeable via stdin (`-`), `--json` for
+NDJSON list output (`--json=full|raw` for deeper projections), `--dry-run` to preview a gated op and
+get its confirm token, `--yes` for outward sends, `--confirm <token>` for destructive/blast. During
+development invoke it as `deno task cli -- <group> <command> …` from the repo.
+`letterdog <group> --help` / `<command> --help` lists real flags.
 
-For reply-all decisions, do not default to everyone just because multiple recipients are present.
-Reply only to the sender when the answer is mainly for them. Reply to the wider recipient set when
-the answer affects shared context, answers a group question, or avoids hiding a decision from people
-who were clearly included on purpose. Call out ambiguity before sending.
+Recipes (real flags — address flags take JSON objects, not bare emails):
 
-## Forwarding
+```sh
+# Attach a local file: upload the bytes, then reference the blob_id.
+blob_id=$(letterdog blob upload --content-base64 "$(base64 -i report.pdf)" \
+  --content-type application/pdf --json | jq -r .blob_id)
+letterdog mail send --to '{"email":"a@b.example"}' --subject "Report" \
+  --body-text "$(cat body.md)" \
+  --attachments "{\"blob_id\":\"$blob_id\",\"name\":\"report.pdf\",\"type\":\"application/pdf\"}" \
+  --yes
 
-Use `forward_emails` for forwarding explicit message ids. Read the message or recent thread context
-first so any note is accurate.
+# Save attachments to disk (one: add --blob-id; all: just the email).
+letterdog attachment save --email-id <email_id> --out-path ~/Downloads/
 
-Choose the forwarding mode deliberately:
+# Bulk-label pipeline: `-` reads ids from stdin (bare or JSON-quoted lines both work).
+letterdog mail search 'from:newsletter@x.example' --ids-only --limit 200 --json \
+  | letterdog mail organize - --add-labels <mailbox>
 
-- `quote` when the recipient needs a readable inline forward.
-- `attachOriginal` when preserving the original MIME source is more important.
+# Raw fidelity: export .eml to disk / import into a mailbox.
+letterdog mail export --ids <id1>,<id2> --out-dir ./eml/
+letterdog mail import ... --mailbox inbox   # see letterdog mail import --help
+```
 
-If the user did not explain why they are forwarding, either forward without a note when the message
-is self-explanatory or ask for the intended framing. For long threads, a short note with current
-status, requested action, and deadline is usually more useful than forwarding without context.
+## Escape Hatch
 
-Be careful when forwarding outside the user's domain or to a new audience. Avoid leaking internal
-context unless the user clearly wants that recipient to see it.
-
-## Labels, Keywords, Archive, And Delete
-
-Stalwart's default user-visible label model is JMAP Mailboxes. Keywords are flags and lightweight
-tags. Use mailbox labels for Gmail-like labels unless the user specifically asks for keyword/tag
-semantics.
-
-Use:
-
-- `create_mail_label` to create a mailbox-backed label.
-- `apply_mail_labels` to add mailbox labels or keyword tags to explicit ids.
-- `batch_modify_emails` for explicit mailbox/keyword add/remove patches, read/unread/starred-like
-  keyword changes, trashing, or permanent deletion.
-- `bulk_label_matching_emails` only after the query is tight enough. It defaults to dry-run; keep it
-  that way until the user confirms the match set.
-- `archive_emails` to remove Inbox and optionally add Archive. Archiving must not destroy mail.
-- `delete_emails` for Trash by default. Permanent deletion requires `permanent: true` and explicit
-  user intent.
-
-Search or inspect before bulk mutation. Prefer exact ids for destructive actions. Do not turn a
-broad search into archive/delete/label changes unless the user explicitly asked for that broad
-operation and the query has been checked.
-
-## Mutation Confirmation
-
-Draft create/update, mail-label creation, explicit-id archive, and explicit-id label application
-execute directly. Sending mail, forwarding, trash/permanent delete, mailbox removals, and
-query-powered bulk mutations may return a preview with `confirmationRequired`, `confirmFingerprint`,
-and `expiresAt` instead of executing. Present the summary and relevant target ids. When the user
-confirms, call the same tool again with the same arguments plus `confirmFingerprint` and
-`confirmExpiresAt` set to the returned `expiresAt`.
-
-Do not invent, inspect, persist, or ask for any confirmation secret. Treat the confirmation as bound
-to the exact payload, account, actor, operation, and expiry.
-
-Use `if_in_state` when a prior read gives a usable state token and concurrent mailbox changes would
-matter.
-
-## Pasted Links And External Identifiers
-
-Letterdog tools operate on JMAP `email_id`, `thread_id`, `blob_id`, mailbox ids, and structured
-search. Do not pass Gmail web URLs, webmail routes, or arbitrary browser links into Stalwart tools.
-If the user provides an unsupported link, ask for fetchable identifiers such as sender, subject,
-approximate date, RFC 822 `Message-ID`, or pasted email text.
-
-## Raw JMAP Escape Hatch
-
-Use `jmap_call` for diagnostics or temporary gaps only. It is read-only by default. Mutating raw
-calls require `allow_mutation` and the same confirmation flow as typed tools. Prefer typed mail
-tools for normal user-facing work because they handle account resolution, mailbox roles, attachment
-verification, and safer mutation previews.
+`jmap_call` runs arbitrary JMAP `[method, args, callId]` triples with `#`-back-reference chaining
+(`{"#ids": {resultOf, name, path}}`, `/*` maps over arrays). Read-only by default; mutations need
+`allow_mutation: true` plus two-phase confirmation. Prefer the typed tools; use this for diagnostics
+and gaps.
 
 ## Response Style
 
-Lead mailbox summaries with the latest status, then decisions, open questions, and action items. For
-triage, include sender, subject, why the item is in its bucket, and the likely next action.
-
-For proposed writes, include the target message/thread ids when useful, the mailbox or keyword
-changes, whether the action is draft/send/archive/trash/permanent delete, and whether confirmation
-is still pending.
-
-Keep drafts concise and ready to paste or send. If a draft depends on missing facts, provide the
-best draft plus a short list of unresolved details.
+Lead with the latest status, then decisions, open questions, action items. For triage buckets
+(Urgent / Needs reply soon / Waiting / FYI) include sender, subject, why bucketed, and next action.
+State search scope and confidence — no absolute claims a sampled search cannot support. For writes,
+state target ids, the exact change, and whether a confirmation is pending. Letterdog ids are JMAP
+ids — never feed Gmail URLs or webmail links into these tools.

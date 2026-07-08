@@ -1,4 +1,4 @@
 interface:
   display_name: "Letterdog Free Up Time"
-  short_description: "Find movable time in Letterdog calendars"
-  default_prompt: "Use $letterdog-calendar-free-up-time to find ways to open a focus block on my Letterdog calendar."
+  short_description: "Find movable time and draft safe reschedules on the user's self-hosted Letterdog calendar (JMAP)"
+  default_prompt: "Use $letterdog-calendar-free-up-time to open a focus block on my Letterdog calendar: classify what can move, then propose minimal reschedules or holds, stating occurrence-vs-series scope and attendee effects."

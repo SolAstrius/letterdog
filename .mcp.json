@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "letterdog": {
+      "type": "http",
+      "url": "https://mcp.mail.astrius.ink/mcp",
+      "headers": {
+        "Authorization": "Bearer ${STALWART_BEARER}"
+      }
+    }
+  }
+}

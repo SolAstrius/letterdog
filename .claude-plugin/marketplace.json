@@ -1,0 +1,14 @@
+{
+  "name": "letterdog-marketplace",
+  "owner": { "name": "Sol Astrius Phoenix", "email": "me@danielsol.dev" },
+  "plugins": [
+    {
+      "name": "letterdog",
+      "source": "./",
+      "displayName": "Letterdog",
+      "description": "Personal self-hosted mail/calendar/contacts (JMAP): 22 curated MCP tools, the letterdog CLI, and mail/calendar workflow skills.",
+      "category": "productivity",
+      "keywords": ["mail", "calendar", "contacts", "jmap", "pim", "stalwart"]
+    }
+  ]
+}

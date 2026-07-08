@@ -1,4 +1,4 @@
 interface:
   display_name: "Letterdog Meeting Prep"
-  short_description: "Prepare for Letterdog meetings"
-  default_prompt: "Use $letterdog-calendar-meeting-prep to prepare for my next Letterdog meeting."
+  short_description: "Concise prep briefs from Letterdog events, attendees, and related mail (self-hosted JMAP)"
+  default_prompt: "Use $letterdog-calendar-meeting-prep to prepare for my next Letterdog meeting: read the full event, resolve attendees, pull related mail context, and give me a prep brief."

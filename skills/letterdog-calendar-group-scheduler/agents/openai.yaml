@@ -1,4 +1,4 @@
 interface:
   display_name: "Letterdog Group Scheduler"
-  short_description: "Schedule groups with Letterdog availability"
-  default_prompt: "Use $letterdog-calendar-group-scheduler to find good meeting slots for this group."
+  short_description: "Rank meeting slots from Letterdog free/busy data and create invitations (self-hosted JMAP)"
+  default_prompt: "Use $letterdog-calendar-group-scheduler to find good meeting slots for this group: resolve people, check their availability, rank a few candidate times, and only send invitations deliberately."

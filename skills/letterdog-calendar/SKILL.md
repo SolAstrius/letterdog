@@ -1,129 +1,137 @@
 ---
 name: letterdog-calendar
-description: "Manage Letterdog calendars — the user's personal self-hosted calendar (Stalwart JMAP/JSCalendar). Use when inspecting calendars/events, checking availability, creating or updating events, RSVP-ing, handling alerts, reading raw iCalendar via CalDAV, or making safe calendar changes on the user's own server rather than Google Calendar."
+description: "Letterdog — the user's personal self-hosted mail/calendar/contacts (JMAP/JSCalendar), not Google Calendar. Use when inspecting calendars/events, checking availability, creating or updating events, editing recurring series or single occurrences, RSVP-ing, or making safe calendar changes on the user's own server."
 ---
 
 # Letterdog Calendar
 
-## Core Flow
+## Tool Surface
 
-Use the Letterdog tools when they are available. If the expected tools are missing, report that
-the Letterdog MCP server is not registered or not connected before trying another surface.
+MCP tools for calendar: `whoami`, `list_calendars`, `search_events`, `read_events`, `create_events`,
+`update_event`, `delete_events`, `respond_to_event`, `get_availability`, `search_people`, and the
+escape hatch `jmap_call`. If these are missing, report that the Letterdog MCP server is not
+connected before trying another surface.
 
-For HTTP MCP, expect the server to reject calls without `Authorization: Bearer <token>`. Do not ask
-for or handle a separate MCP secret for normal tool use.
+Conventions that apply everywhere:
 
-Start with `stalwart_session_info` when the account, capabilities, or backend URL matter. Use
-explicit `account_id` only when the user gives one or the session exposes multiple plausible
-accounts; otherwise let the tools resolve the account from the bearer-backed JMAP session.
+- Batch-first: `read_events`/`delete_events`/`create_events` take arrays; one call, many ids.
+  `update_event` and `respond_to_event` are deliberately singular (one patch, one target).
+- Every list/read returns `{items, failed?, not_found?, state?}`; per-item problems land in `failed`
+  — check it instead of assuming all-or-nothing.
+- `projection: "brief" | "full" | "raw"` (default brief) + `fields: [...]` on every read. Brief
+  events carry title, start, computed end, time_zone, calendar name, location, participant count +
+  own status, recurring flag.
+- `whoami` first when the RSVP/invite identity or default calendar matters; it returns the
+  participant identities (calendar addresses) and default calendar.
+- Turn relative dates (today, next week) into concrete windows before querying, and state the
+  timezone used.
 
-Prefer bounded reads. Always turn relative dates such as today, tomorrow, or next week into concrete
-local date/time windows before querying.
+## Time Semantics (search_events)
 
-## Calendar And Event Reads
+Time bounds are LocalDateTime (NO `Z` suffix) interpreted in the `time_zone` arg (default Etc/UTC).
+Overlap semantics: `after` is compared against each event's END, `before` against its START — an
+event straddling the window boundary is still returned. `in_calendar` scopes to one calendar;
+`text`/`title`/`location` filter content.
 
-List calendars with `calendar_list`. Include user-supplied calendar filters when relevant, and use
-`calendar_get` for specific ids.
+## Recurrence: Occurrences And Series
 
-Search events with `calendar_event_search` using `calendar_ids`, `time_min`, `time_max`, `query`,
-`limit`, or a structured `filter` when needed. `fetch` defaults to true.
+There is NO scope/updateScope/destroyScope parameter — it never existed. Occurrence addressing works
+through synthetic instance ids:
 
-For complete event information, omit `properties` on `calendar_event_search`, `calendar_event_get`,
-or `calendar_event_batch_get`. This returns the full JSCalendar event object exposed by Stalwart.
-For search responses, read events from `get.list`. Do not look for a separate full-event alias.
+- `search_events` with `expand: true` — REQUIRES both `after` and `before` bounds — expands
+  recurring events into individual occurrences, each with a synthetic per-instance id,
+  `base_event_id`, and `utcStart`/`utcEnd`.
+- A synthetic instance id passed to `read_events` / `update_event` / `delete_events` addresses just
+  that one occurrence: update records a recurrenceOverride; delete excludes the occurrence (the rest
+  of the series remains).
+- A base event id addresses the whole series: update changes every occurrence; delete destroys the
+  event entirely.
+- This-and-future = the split-series pattern: truncate the original series (`update_event` on the
+  base id, patching the recurrence rule's `until` to just before the split point), then
+  `create_events` a new event starting at the split point with the changed properties.
+- `respond_to_event` takes `occurrence_id` (a LocalDateTime recurrence id) to RSVP to a single
+  occurrence.
 
-Use `calendar_event_get` for one known event id and `calendar_event_batch_get` for a set of ids. Use
-`fetch: false` only when ids/states are enough.
-
-Use `calendar_event_changes` and `calendar_event_query_changes` for sync-style follow-up work rather
-than polling broad date ranges.
+Always state which scope an edit hits (one occurrence vs whole series) before mutating.
 
 ## Availability And People
 
-Use `availability_get` for free/busy checks when you have `calendar_addresses` or `principal_ids`.
-Set `utc_start` and `utc_end` explicitly, and use `show_details` only when the user needs conflict
-details.
+`get_availability` over a UTC window (`utc_start`/`utc_end`, `Z`-suffixed) for `addresses`
+(mailto:…) and/or `principal_ids`. Returns normalized busy periods `{start, end, status}` with
+precedence confirmed > unavailable > tentative; `show_details` attaches events when rights allow.
+Use it before proposing slots — `search_events` only sees the user's own calendars, and
+freeBusy-only shares are invisible in `list_calendars` ("not listed" does not mean "free").
 
-Use `principal_search` and `principal_get` to resolve people, groups, or room-like principals.
-`principal_search` defaults to ids only; set `fetch: true` when names, addresses, or other principal
-fields matter. Do not assume a separate room directory exists unless `principal_search` reveals one.
-
-Use `participant_identity_list` to determine which identity the caller can RSVP or invite as. Use
-`participant_identity_set_default` only when the user explicitly asks to change their default
-identity.
+`search_people` resolves names/emails across contacts AND schedulable principals; use the returned
+`calendar_address` for participants and RSVPs, and `principal_ids` for availability.
 
 ## Mutations
 
-Use the typed mutation tools before `jmap_call`:
+- `create_events`: typed JSCalendar bodies (title, `start` LocalDateTime + `timeZone`, `duration`,
+  participants, recurrenceRules, alerts). `send_invitations` (default false) controls iTIP both
+  ways: true emails every participant an invitation; false creates silently — pick deliberately.
+  `is_draft` stages with no scheduling side effects.
+- `update_event`: convenience fields (title/start/duration/time_zone/location/description/status)
+  and/or a raw JSCalendar `patch` (JSON-Pointer keys, null removes). `send_updates` emails
+  participants — without it, scheduled attendees silently desync; set it whenever attendees exist
+  and the change is visible to them.
+- `delete_events`: `send_cancellations` for iTIP CANCEL. Destructive — always two-phase.
+- `respond_to_event`: status accepted/declined/tentative; matches the user's own participant entry
+  via their ParticipantIdentity calendarAddress. `notify_organizer` defaults true (iTIP REPLY).
+  There is no counter-proposal mechanism.
 
-- `calendar_event_create` for one new JSCalendar event.
-- `calendar_event_batch_create` for multiple new JSCalendar events in one JMAP call.
-- `calendar_event_update` for patches to one event.
-- `calendar_event_delete` for destroys.
-- `calendar_event_copy` for copy/move-like workflows.
-- `calendar_event_respond` for RSVP changes.
-- `calendar_create`, `calendar_update`, `calendar_delete`, `calendar_set_default`,
-  `calendar_subscribe`, and `calendar_share` for calendar-level changes.
+## Confirmation
 
-For recurring events, always choose and state the scope: `this`, `future`, or `all`. Do not silently
-apply a series-wide update.
+Most actions run directly: event create/update without invitations or updates to attendees, drafts,
+holds, RSVPs under the personal policy. Do not ask ritual confirmation for these.
 
-For scheduling-visible changes, set `sendSchedulingMessages` deliberately. Default to avoiding
-messages for private drafts and holds; send messages when the user is inviting, rescheduling,
-cancelling, or RSVP-ing with attendees who should be notified.
+Only these are two-phase: `delete_events` (always), deleting a calendar that still has events (CLI),
+share/ACL changes (CLI), admin/sieve (CLI), raw JMAP mutations (`jmap_call` with `allow_mutation`),
+and query-powered bulk over 100 items. Two-phase means the tool returns
+`confirmation_required: true` + `confirm_token` + a brief preview instead of executing; show the
+preview, then repeat the IDENTICAL call with `confirm_token` added. Outward scheduling messages
+(invitations, update/cancel notices, RSVP replies) may return the same challenge under stricter
+server policies — handle it identically. Never invent or persist tokens.
 
-Ordinary event creation, single-event updates, event copies, calendar create/update/default changes,
-subscription visibility changes, notification dismissals, and alert acknowledge/snooze actions
-execute directly. Mutations that delete, share calendars, RSVP, update `future`/`all` recurrence
-scopes, or send scheduling messages may return a preview with `confirmFingerprint` and `expiresAt`
-instead of executing. Present the preview and, when the user confirms, call the same tool again with
-the same arguments plus `confirmFingerprint` and `confirmExpiresAt` set to the returned `expiresAt`.
-Do not invent, inspect, or persist any confirmation secret.
+## MCP vs CLI Routing
 
-Use `if_in_state` when the tool response or prior read gives a usable state token.
+Use the MCP tools for reading, scheduling, RSVPs, and event edits. Drop to the CLI binary
+`letterdog` via Bash when the task involves:
 
-## Alerts, Notifications, And Attachments
+- local files (export/import, saving raw data to disk);
+- more than ~20 mutations (pipelines);
+- raw iCalendar fidelity (CalDAV: `letterdog dav get|put|delete …`, ETag-guarded);
+- calendar management (create/update/delete/share/set-default: `letterdog calendar …`),
+  participant-identity management (`letterdog calendar identity_set`), alerts/notifications
+  (`letterdog alert ack|snooze`, `letterdog notify list|dismiss`), admin settings, sync primitives;
+- anything the MCP surface doesn't wrap.
 
-Use `event_notification_list` for event-change notifications and `event_notification_dismiss` only
-after an explicit dismiss request.
+CLI auth comes from `STALWART_BEARER` in the environment (launchctl-set on this machine). Shape:
+`letterdog <group> <command> [flags] [ids…|-]` — trailing ids pipeable via stdin (`-`), `--json`
+NDJSON output for lists (`--json=full|raw` for deeper projections), `--dry-run` to preview a gated
+op and get its confirm token, `--yes` for outward sends, `--confirm <token>` for destructive/blast.
+During development invoke it as `deno task cli -- <group> <command> …` from the repo. Calendar
+groups: `calendar` (list/availability/create/update/delete/share/identity_set), `event`
+(search/read/create/update/delete/rsvp), `people`, `contact`, `alert`, `notify`, `dav`. `--help` on
+any command lists real flags.
 
-Use `alert_acknowledge` and `alert_snooze` for alert state. For creating or editing reminders, patch
-the event's JSCalendar `alerts` with `calendar_event_update`.
+```sh
+letterdog event search --after 2026-07-08T00:00:00 --before 2026-07-15T00:00:00 \
+  --time-zone Europe/Berlin --expand --json
+letterdog calendar availability --addresses mailto:x@y.example \
+  --utc-start 2026-07-08T00:00:00Z --utc-end 2026-07-09T00:00:00Z
+letterdog dav get ...        # raw iCalendar source when byte fidelity matters
+```
 
-Read attachment/blob metadata from the full event object first. Use `blob_get`, `blob_lookup`,
-`file_node_get`, or `file_node_list` only when the event references blobs or file nodes that need
-separate metadata/download URLs. Use `blob_upload` for base64 uploads, then attach or link the
-resulting blob through a separate event/file mutation if needed.
+## Escape Hatch
 
-## Raw Source And Escape Hatches
-
-Use CalDAV only when raw iCalendar source, ETags, hrefs, or server DAV metadata matter:
-
-- `caldav_discover`
-- `caldav_calendar_list`
-- `caldav_calendar_resources`
-- `caldav_event_search`
-- `caldav_event_get_raw`
-- `caldav_event_multiget_raw`
-- `caldav_propfind`
-- `caldav_event_put_raw`
-- `caldav_event_delete_raw`
-
-Use `icalendar_parse` to convert raw iCalendar text or blobs into JSCalendar where helpful.
-
-For raw CalDAV writes, use `if_match` or `if_none_match_star` when possible and follow the same
-confirmation flow as JMAP mutations. Prefer structured JMAP event tools unless raw iCalendar
-fidelity is the point of the task.
-
-Use `calendar_server_settings_get` and `calendar_server_settings_update` only for Stalwart
-server/admin calendar settings, not user calendar data. Admin updates require
-`ENABLE_ADMIN_TOOLS=true` on the server and confirmation.
-
-Use `jmap_call` only for temporary gaps or diagnostics. It is read-only by default; mutating raw
-calls require `allow_mutation` and the same confirmation flow as typed tools.
+`jmap_call` runs arbitrary JMAP `[method, args, callId]` triples with `#`-back-reference chaining;
+read-only by default, mutations need `allow_mutation: true` + two-phase confirmation. Prefer the
+typed tools.
 
 ## Response Style
 
-Separate observed calendar facts from recommendations. For proposed writes, include the target
-calendar/event id, time zone, attendee-visible effects, recurrence scope, and whether scheduling
-messages will be sent.
+Separate observed calendar facts from recommendations. For proposed writes, state the target
+calendar/event id, timezone, whether the target is one occurrence or the whole series, the
+attendee-visible effects, and whether scheduling messages (invitations/updates/cancellations) will
+be sent.

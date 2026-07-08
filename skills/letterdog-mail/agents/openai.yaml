@@ -1,0 +1,4 @@
+interface:
+  display_name: "Letterdog Mail"
+  short_description: "Search, triage, and act on the user's self-hosted Letterdog mail (JMAP)"
+  default_prompt: "Use $letterdog-mail to triage my Letterdog inbox: search and batch-read what matters, bucket it, and draft any replies before sending."

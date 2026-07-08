@@ -1,4 +1,4 @@
 interface:
   display_name: "Letterdog Calendar"
-  short_description: "Letterdog calendar scheduling workflows"
-  default_prompt: "Use $letterdog-calendar to inspect my Letterdog calendar and propose safe scheduling changes."
+  short_description: "Events, availability, RSVPs, and occurrence-safe edits on the user's self-hosted Letterdog calendar (JMAP)"
+  default_prompt: "Use $letterdog-calendar to inspect my Letterdog calendar and propose changes — search and read events, check availability, and state occurrence-vs-series scope and invitation effects before mutating."

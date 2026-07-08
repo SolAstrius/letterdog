@@ -1,4 +1,4 @@
 interface:
   display_name: "Letterdog Daily Brief"
-  short_description: "One-day Letterdog calendar briefs"
-  default_prompt: "Use $letterdog-calendar-daily-brief to summarize my Letterdog calendar for today."
+  short_description: "One-day briefs from the user's self-hosted Letterdog calendar (JMAP)"
+  default_prompt: "Use $letterdog-calendar-daily-brief to summarize my Letterdog calendar for today: search the day's window with expanded recurring occurrences, then report agenda, conflicts, and free windows."

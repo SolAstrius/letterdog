@@ -1,55 +1,43 @@
 ---
 name: letterdog-calendar-daily-brief
-description: "Build concise one-day briefs from Letterdog, the user's self-hosted calendar. Use when the user asks for today's, tomorrow's, or a dated agenda, remaining meetings, conflicts, free windows, a day shape, or a daily calendar brief."
+description: "Build concise one-day briefs from Letterdog — the user's personal self-hosted mail/calendar/contacts (JMAP), not Google Calendar. Use when the user asks for today's, tomorrow's, or a dated agenda, remaining meetings, conflicts, free windows, a day shape, or a daily calendar brief."
 ---
 
 # Letterdog Calendar Daily Brief
 
+Tool mechanics, confirmation flow, and CLI routing live in the `letterdog-calendar` skill. This
+skill covers only the daily-brief workflow.
+
 ## Read The Day
 
-Resolve the requested day to a concrete local start and end. If the user says today, tomorrow, or
-yesterday, use the active local timezone and state the exact date in the answer.
+Resolve the requested day to a concrete local window and state the exact date and timezone in the
+answer. Query with `search_events`: `after` = local day start, `before` = next day start (both
+LocalDateTime, no Z), `time_zone` = the user's zone, `expand: true` so recurring events appear as
+that day's actual occurrences (expand requires both bounds). Bounds use overlap semantics, so events
+straddling midnight are included. Use `list_calendars` only when calendar inclusion matters and the
+user has not named calendars; `in_calendar` scopes to one.
 
-Use `calendar_list` when the user has not named calendars and calendar inclusion matters. Prefer
-visible/subscribed calendars unless the user asks for all calendars or specific calendar ids.
-
-Query the day with:
-
-```json
-{
-  "time_min": "<local-day-start-as-ISO-instant>",
-  "time_max": "<next-local-day-start-as-ISO-instant>",
-  "calendar_ids": ["optional-calendar-ids"],
-  "fetch": true,
-  "limit": 500
-}
-```
-
-Omit `properties` so `calendar_event_search` fetches complete JSCalendar event objects. Read the
-events from `get.list`. Use `calendar_event_batch_get` without `properties` if you already have ids.
+Follow up with `read_events` on the returned ids (base or synthetic instance ids) only when brief
+fields are insufficient — location, participants, description.
 
 ## Interpret Events
 
-Normalize each event into title/summary, start, end, timezone, calendar id, location, participants,
-status, and free/busy or transparency fields when present.
-
-Treat all-day events and transparent/free events as context, not blockers. Compute conflicts from
-overlapping busy timed events. If free/busy status is missing, infer cautiously and say what
-assumption you made.
-
-When a working-day readout is useful and the user did not specify hours, use a stated default such
-as 09:00-18:00 local. Do not hide that assumption.
+Work from the brief projection: title, start, end (computed), time_zone, calendar, location,
+participants, status. Treat all-day and free/transparent events as context, not blockers. Compute
+conflicts from overlapping busy timed events. If free/busy status is missing, infer cautiously and
+say what assumption you made. When a working-day readout is useful and the user did not specify
+hours, use a stated default such as 09:00-18:00 local — do not hide that assumption.
 
 ## Brief Format
 
 Keep the brief compact and practical:
 
 - Header with the exact date and timezone.
-- One-line summary of meeting load, conflicts, and biggest free window.
+- One-line summary: meeting load, conflicts, biggest free window.
 - Agenda in chronological order.
 - Conflicts or tight transitions.
 - Free windows that are actually useful.
 - Remaining-day readout when the day is already in progress.
 
-Mention calendar/source gaps only when they affect confidence, such as missing availability
-capability, failed calendar reads, or ambiguous all-day/free-busy semantics.
+Mention source gaps only when they affect confidence: failed calendar reads, freeBusy-only shares
+invisible to `list_calendars`, ambiguous all-day/free-busy semantics.
