@@ -1,0 +1,4 @@
+interface:
+  display_name: "Letterdog Calendar"
+  short_description: "Letterdog calendar scheduling workflows"
+  default_prompt: "Use $letterdog-calendar to inspect my Letterdog calendar and propose safe scheduling changes."

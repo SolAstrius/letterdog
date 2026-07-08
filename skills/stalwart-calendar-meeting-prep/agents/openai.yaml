@@ -1,4 +1,0 @@
-interface:
-  display_name: "Stalwart Meeting Prep"
-  short_description: "Prepare for Stalwart calendar meetings"
-  default_prompt: "Use $stalwart-calendar-meeting-prep to prepare for my next Stalwart calendar meeting."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Letterdog Daily Brief"
+  short_description: "One-day Letterdog calendar briefs"
+  default_prompt: "Use $letterdog-calendar-daily-brief to summarize my Letterdog calendar for today."

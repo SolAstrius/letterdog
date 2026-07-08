@@ -1,4 +1,4 @@
-# Stalwart MCP Tool Mapping
+# Letterdog Tool Mapping (v1 surface)
 
 This document maps the public MCP tool surface for the Stalwart JMAP MCP server to the underlying
 Stalwart APIs.

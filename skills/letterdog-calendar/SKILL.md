@@ -1,14 +1,14 @@
 ---
-name: stalwart-calendar
-description: "Manage Stalwart calendar workflows through the repo's MCP tools. Use when inspecting calendars/events, checking availability, creating or updating JSCalendar events, RSVP-ing, handling alerts, reading raw iCalendar through CalDAV, or making safe calendar changes with bearer-backed Stalwart JMAP."
+name: letterdog-calendar
+description: "Manage Letterdog calendars — the user's personal self-hosted calendar (Stalwart JMAP/JSCalendar). Use when inspecting calendars/events, checking availability, creating or updating events, RSVP-ing, handling alerts, reading raw iCalendar via CalDAV, or making safe calendar changes on the user's own server rather than Google Calendar."
 ---
 
-# Stalwart Calendar
+# Letterdog Calendar
 
 ## Core Flow
 
-Use the Stalwart MCP tools when they are available. If the expected tools are missing, report that
-the Stalwart MCP server is not registered or not connected before trying another surface.
+Use the Letterdog tools when they are available. If the expected tools are missing, report that
+the Letterdog MCP server is not registered or not connected before trying another surface.
 
 For HTTP MCP, expect the server to reject calls without `Authorization: Bearer <token>`. Do not ask
 for or handle a separate MCP secret for normal tool use.

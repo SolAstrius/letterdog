@@ -1,0 +1,4 @@
+interface:
+  display_name: "Letterdog Free Up Time"
+  short_description: "Find movable time in Letterdog calendars"
+  default_prompt: "Use $letterdog-calendar-free-up-time to find ways to open a focus block on my Letterdog calendar."

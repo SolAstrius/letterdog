@@ -1,7 +1,18 @@
-# v2 Design: One PIM Core, Two Surfaces
+# Letterdog v2 Design: One PIM Core, Two Surfaces
 
 Status: draft for review. Grounded in [rfc-notes/](rfc-notes/) (RFC 8620/8621/8984, RFC 9404,
 RFC 9670, draft-ietf-jmap-calendars-26) and live probes against Stalwart v0.16.11.
+
+## Naming
+
+**Letterdog** is the product: the MCP server, the CLI binary (`letterdog`), the plugin, the
+skills. **Stalwart** appears only where it names the backend server software (provider adapter,
+deployment internals, RFC-notes context). Every agent-facing description leads with the Letterdog
+identity and what it fronts — *"Letterdog, the user's personal self-hosted mail/calendar/contacts
+(JMAP)"* — because sessions routinely have Gmail/Google-Calendar connectors attached too, and the
+description is what routes the model to the right provider. Infra identifiers (k8s deployment
+name, image, `mcp.mail.astrius.ink` host, `STALWART_BEARER` env var) are renamed opportunistically
+during the v2 rollout, not before.
 
 ## Architecture
 
@@ -16,7 +27,7 @@ Stalwart" below).
                     └──────────────────────────────┘  │   ┌──────────────────┐
                                                       ├──▶│  domain core      │──▶ Stalwart
                     ┌──────────────────────────────┐  │   │  (typed client,   │    JMAP/CalDAV
-   Claude Code / ──▶│  CLI (`stalwart`, local)      │──┘   │  schemas, safety, │
+   Claude Code / ──▶│  CLI (`letterdog`, local)     │──┘   │  schemas, safety, │
    Codex / human    │  full spec-faithful surface   │      │  compose, cache)  │
                     └──────────────────────────────┘      └──────────────────┘
 ```
@@ -118,6 +129,32 @@ Rules:
   `total` opt-in (`calculateTotal` is spec-optional and can be slow anyway).
 - CLI mirrors this: human tables on TTY, `--json` = brief projection, `--json=full|raw` for more.
 
+### Confirmation policy — lighter by default
+
+v1 two-phases nearly every outward or destructive action. That double-gates: MCP clients already
+show tool arguments in their own permission prompt, so most mutations pay **two tool calls, a
+re-sent payload, and a reasoning round-trip for no added safety**. v2 reserves the two-phase flow
+for actions that are *both* hard to reverse *and* high blast radius, controlled by a server-side
+`CONFIRM_POLICY` (per deployment; the personal instance runs `minimal`).
+
+| Action class | `strict` (v1-like) | `balanced` (default) | `minimal` (personal) |
+|---|---|---|---|
+| Reversible / low blast: labels, marks, moves **incl. trash**, archive, drafts, holds, event create/update without scheduling messages, alerts, dismissals, subscriptions | direct | direct | direct |
+| Outward messaging: send/reply/forward, invitations, reschedule/cancel notices, RSVP replies | two-phase | direct when ≤3 recipients and not query-powered; two-phase otherwise | direct (client prompt + `cancel_send` undo window are the gates) |
+| Irreversible destruction: permanent email destroy, calendar delete with events, mailbox delete with mail | two-phase | two-phase | two-phase |
+| High blast radius: share ACL changes, `x:*` admin, raw JMAP mutations, query-powered bulk > 100 items | two-phase | two-phase | two-phase |
+
+Notes:
+
+- Trash moves drop out of confirmation entirely (they are reversible by definition — that's what
+  Trash is for). Permanent destroy keeps the gate in every policy.
+- Where two-phase remains, it gets cheaper: the preview uses the brief projection, the
+  `confirm_token` embeds its own expiry (no `confirmExpiresAt` echo), and a token mismatch returns
+  an actionable diff of what changed rather than a bare "fingerprint mismatch".
+- CLI equivalents: class-2 = `--yes`; classes 3–4 = `--confirm <token>` from the dry run.
+- Skills stop teaching ritual confirmation for routine actions; they describe only the two
+  remaining gated classes.
+
 Core rules carried over from the first draft (unchanged, they apply to both surfaces):
 
 - Typed payloads with `.passthrough()`; cross-field invariants via `superRefine`
@@ -156,7 +193,7 @@ Every tool: agent-facing description (when to use, the trap it avoids, follow-up
 
 Dropped to CLI: draft CRUD beyond reply/send `send:false` (list via `search_emails is:draft`),
 `bulk_label_matching` (CLI pipelines do it better), import/export, vacation response, mailbox
-management (`create_mail_label` → CLI `stalwart mailbox create`).
+management (`create_mail_label` → CLI `letterdog mailbox create`).
 
 ### Calendar (8)
 
@@ -186,42 +223,42 @@ notifications, alert ack/snooze, CalDAV raw, admin settings, all sync primitives
 Contacts schema work (JSContact Card) gets the same RFC-digest treatment before implementation —
 one more reader pass over RFC 9553 + RFC 9610 into `rfc-notes/`.
 
-## Surface 2: CLI — `stalwart` (working name)
+## Surface 2: CLI — `letterdog`
 
 Deno, same core, `deno compile` binary shipped via the plugin and the nix flake. Output: human
 tables on TTY, `--json` (NDJSON for lists) otherwise — agents get stable JSON by default when
 piped. Auth: `STALWART_BEARER` (already in launchctl env), `--url`, `--account`.
 
 ```
-stalwart whoami
-stalwart mail search 'from:klarna after:2026-06-01' [--json] [--limit N] [--ids-only]
-stalwart mail read <id...> [--body] [--raw] [--save-dir DIR]
-stalwart mail thread <id>
-stalwart mail reply <id> [--all] [--body-file F | --body S] [--attach FILE...] [--draft | --yes]
-stalwart mail send [--to ... --subject ... --body-file F] [--attach FILE...] [--at TIME] [--yes]
-stalwart mail forward <id...> --to ... [--attach-original] [--yes]
-stalwart mail label|mark|move <id...|-> ...       # ids via args or stdin (pipe from search)
-stalwart mail delete <id...|-> [--permanent --confirm TOKEN]
-stalwart mail import FILE... --mailbox inbox      # Email/import
-stalwart mail export <id...> -o DIR               # raw .eml to disk
-stalwart attachment save <email_id> [<blob_id>] -o PATH|DIR
-stalwart mailbox list|create|rename|delete
-stalwart draft list|create|update|delete
-stalwart vacation get|set ...
-stalwart cal list
-stalwart event search --from T --to T [--calendar C] [--expand] [--query S]
-stalwart event get|create|update|delete|rsvp ...  # --file event.json or typed flags
-stalwart avail <address...> --from T --to T [--details]
-stalwart contact search|get ...
-stalwart people search S                          # contacts + principals
-stalwart notify list|dismiss
-stalwart alert ack|snooze <event_id> <alert_id> [--until T]
-stalwart blob upload FILE | download <blob_id> -o PATH
-stalwart dav discover|list|get|put|delete ...     # raw CalDAV, ETag-guarded
-stalwart sieve list|get|put|activate ...
-stalwart raw '<jmap request json>' [--allow-mutation --confirm TOKEN]
-stalwart admin settings get|update ...
-stalwart sync changes <Type> --since STATE        # the demoted sync primitives live here
+letterdog whoami
+letterdog mail search 'from:klarna after:2026-06-01' [--json] [--limit N] [--ids-only]
+letterdog mail read <id...> [--body] [--raw] [--save-dir DIR]
+letterdog mail thread <id>
+letterdog mail reply <id> [--all] [--body-file F | --body S] [--attach FILE...] [--draft | --yes]
+letterdog mail send [--to ... --subject ... --body-file F] [--attach FILE...] [--at TIME] [--yes]
+letterdog mail forward <id...> --to ... [--attach-original] [--yes]
+letterdog mail label|mark|move <id...|-> ...       # ids via args or stdin (pipe from search)
+letterdog mail delete <id...|-> [--permanent --confirm TOKEN]
+letterdog mail import FILE... --mailbox inbox      # Email/import
+letterdog mail export <id...> -o DIR               # raw .eml to disk
+letterdog attachment save <email_id> [<blob_id>] -o PATH|DIR
+letterdog mailbox list|create|rename|delete
+letterdog draft list|create|update|delete
+letterdog vacation get|set ...
+letterdog cal list
+letterdog event search --from T --to T [--calendar C] [--expand] [--query S]
+letterdog event get|create|update|delete|rsvp ...  # --file event.json or typed flags
+letterdog avail <address...> --from T --to T [--details]
+letterdog contact search|get ...
+letterdog people search S                          # contacts + principals
+letterdog notify list|dismiss
+letterdog alert ack|snooze <event_id> <alert_id> [--until T]
+letterdog blob upload FILE | download <blob_id> -o PATH
+letterdog dav discover|list|get|put|delete ...     # raw CalDAV, ETag-guarded
+letterdog sieve list|get|put|activate ...
+letterdog raw '<jmap request json>' [--allow-mutation --confirm TOKEN]
+letterdog admin settings get|update ...
+letterdog sync changes <Type> --since STATE        # the demoted sync primitives live here
 ```
 
 Safety model: read commands just run. Mutating commands print a one-line effect summary; sends,
@@ -231,7 +268,7 @@ it's meaningful. The harness's own Bash permission prompt is the second gate.
 
 ## Skills (rewritten with v2)
 
-- `stalwart-mail`, `stalwart-calendar` — mechanics of the new MCP surface **plus the routing
+- `letterdog-mail`, `letterdog-calendar` — mechanics of the new MCP surface **plus the routing
   rule** and CLI recipes (attach local file, save attachments, bulk label via pipeline).
 - The four workflow skills slim to their deltas (triage rubric, slot-ranking, movable-event
   classification, prep-brief format) and reference the mechanics skills.
@@ -284,7 +321,6 @@ actually adopts it — no speculative framework building, but no accidental coup
 
 ## Open questions
 
-- CLI name: `stalwart` collides with upstream's own binary name — `swm`? `pim`? `astr`?
 - MCP `read_attachment` default mode: `url` (safe, tiny) vs `content` (convenient) — leaning url.
 - Whether `organize_emails` (one tool) vs `label/mark/move` (three) reads better to models —
   decide by testing against real transcripts.

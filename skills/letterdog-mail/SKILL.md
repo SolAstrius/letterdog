@@ -1,14 +1,14 @@
 ---
-name: stalwart-mail
-description: "Manage Stalwart/JMAP mail through the Stalwart MCP tools. Use when the user wants to inspect current mail, search messages, summarize threads, triage inbox or junk/marketing mail, read attachments, draft replies, forward mail, create/send drafts, archive, delete, or apply mailbox labels/keywords through Stalwart rather than Gmail."
+name: letterdog-mail
+description: "Manage Letterdog — the user's personal self-hosted mail (Stalwart JMAP; addresses on danielsol.dev, astrius.ink, ashbornlabs.com, and other own domains). Use when the user wants to inspect, search, or summarize mail, triage inbox/junk/marketing, read attachments, draft or send replies, forward, archive, delete, or apply labels/keywords on their own mail server — not Gmail or other hosted accounts."
 ---
 
-# Stalwart Mail
+# Letterdog Mail
 
 ## Core Flow
 
-Use the Stalwart MCP mail tools when they are available. If the expected tools are missing, report
-that the Stalwart MCP server is not registered or not connected before trying another mailbox
+Use the Letterdog mail tools when they are available. If the expected tools are missing, report
+that the Letterdog MCP server is not registered or not connected before trying another mailbox
 surface.
 
 Start with `get_mail_profile`, `list_mailboxes`, or `stalwart_session_info` when the account,
@@ -25,7 +25,7 @@ Prefer `search_emails` for most mailbox tasks because it combines `Email/query` 
 `search_email_ids` when the next operation needs explicit ids, such as labels, archive, delete, or
 batch reads.
 
-Good Stalwart search inputs include:
+Good Letterdog search inputs include:
 
 - Gmail-like query text for supported operators: `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `body:`,
   `text:`, `has:attachment`, `is:read`, `is:unread`, `is:starred`, `is:draft`, `is:important`,
@@ -153,7 +153,7 @@ matter.
 
 ## Pasted Links And External Identifiers
 
-Stalwart tools operate on JMAP `email_id`, `thread_id`, `blob_id`, mailbox ids, and structured
+Letterdog tools operate on JMAP `email_id`, `thread_id`, `blob_id`, mailbox ids, and structured
 search. Do not pass Gmail web URLs, webmail routes, or arbitrary browser links into Stalwart tools.
 If the user provides an unsupported link, ask for fetchable identifiers such as sender, subject,
 approximate date, RFC 822 `Message-ID`, or pasted email text.

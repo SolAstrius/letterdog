@@ -1,4 +1,4 @@
-# Stalwart JMAP MCP
+# Letterdog
 
 Deno MCP server for Stalwart's JMAP, CalDAV, and Stalwart management surfaces.
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Letterdog Meeting Prep"
+  short_description: "Prepare for Letterdog meetings"
+  default_prompt: "Use $letterdog-calendar-meeting-prep to prepare for my next Letterdog meeting."

@@ -1,9 +1,9 @@
 ---
-name: stalwart-calendar-daily-brief
-description: "Build concise one-day briefs from Stalwart calendar data. Use when the user asks for today's, tomorrow's, or a dated agenda, remaining meetings, conflicts, free windows, a day shape, or a daily calendar brief using Stalwart MCP tools."
+name: letterdog-calendar-daily-brief
+description: "Build concise one-day briefs from Letterdog, the user's self-hosted calendar. Use when the user asks for today's, tomorrow's, or a dated agenda, remaining meetings, conflicts, free windows, a day shape, or a daily calendar brief."
 ---
 
-# Stalwart Calendar Daily Brief
+# Letterdog Calendar Daily Brief
 
 ## Read The Day
 

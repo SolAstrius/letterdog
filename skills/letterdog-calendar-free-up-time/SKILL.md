@@ -1,9 +1,9 @@
 ---
-name: stalwart-calendar-free-up-time
-description: "Find practical ways to open time in Stalwart calendars. Use when the user wants to clear a day, make a focus block, identify movable meetings, create holds, or draft safe reschedules using Stalwart MCP calendar and availability tools."
+name: letterdog-calendar-free-up-time
+description: "Find practical ways to open time in Letterdog, the user's self-hosted calendar. Use when the user wants to clear a day, make a focus block, identify movable meetings, create holds, or draft safe reschedules using Letterdog calendar and availability tools."
 ---
 
-# Stalwart Calendar Free Up Time
+# Letterdog Calendar Free Up Time
 
 ## Build The Baseline
 

@@ -1,9 +1,9 @@
 ---
-name: stalwart-calendar-meeting-prep
-description: "Prepare for meetings from Stalwart calendar events. Use when the user asks what a meeting is about, what to read, who is attending, what links or attachments matter, or for a concise prep brief based on Stalwart MCP calendar data."
+name: letterdog-calendar-meeting-prep
+description: "Prepare for meetings from Letterdog calendar events (the user's self-hosted calendar). Use when the user asks what a meeting is about, what to read, who is attending, what links or attachments matter, or for a concise prep brief."
 ---
 
-# Stalwart Calendar Meeting Prep
+# Letterdog Calendar Meeting Prep
 
 ## Find The Event
 

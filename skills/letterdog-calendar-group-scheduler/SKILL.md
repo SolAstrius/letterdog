@@ -1,9 +1,9 @@
 ---
-name: stalwart-calendar-group-scheduler
-description: "Schedule groups with Stalwart calendar availability. Use when the user wants candidate meeting times, attendee or room availability checks, conflict ranking, temporary holds, or event creation for multiple participants through Stalwart MCP tools."
+name: letterdog-calendar-group-scheduler
+description: "Schedule groups with Letterdog availability data (the user's self-hosted calendar). Use when the user wants candidate meeting times, attendee or room availability checks, conflict ranking, temporary holds, or multi-participant event creation through Letterdog tools."
 ---
 
-# Stalwart Calendar Group Scheduler
+# Letterdog Calendar Group Scheduler
 
 ## Resolve Participants
 
