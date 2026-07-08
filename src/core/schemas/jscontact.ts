@@ -2,12 +2,13 @@
  * JSContact Card (RFC 9553, JMAP contacts RFC 9610) Zod schemas — scoped to the Card-level
  * properties the PIM needs (design "Open questions": names, emails, phones, addresses,
  * organizations, notes, linked principals).
- * CONTRACT STUB — TODO(builder: B3-schemas-calendar). A dedicated RFC 9553/9610 digest pass
- * into docs/rfc-notes/ happens before deep Card work; keep this tolerant (passthrough) until
- * then.
+ *
+ * Stalwart's contacts surface is UNPROBED, so these schemas stay deliberately loose: only the
+ * fields people-ops project are typed, everything else round-trips via .passthrough(). Nested
+ * maps (emails, phones, …) type just the one load-bearing subfield and passthrough the rest.
+ * Keep tolerant until a dedicated RFC 9553/9610 digest lands in docs/rfc-notes/.
  */
 import { z } from "zod";
-import { todoSchema } from "./common.ts";
 
 export interface CardName {
   full?: string;
@@ -31,9 +32,48 @@ export interface ContactCard {
   [key: string]: unknown;
 }
 
-export const ContactCardSchema: z.ZodType<ContactCard> = todoSchema(
-  "schemas/jscontact ContactCardSchema",
-);
+/** Name component: {kind, value} + passthrough (RFC 9553 §2.2.1). */
+const NameComponentSchema = z.object({
+  kind: z.string(),
+  value: z.string(),
+}).passthrough();
+
+const CardNameSchema = z.object({
+  full: z.string().optional(),
+  components: z.array(NameComponentSchema).optional(),
+}).passthrough();
+
+const EmailEntrySchema = z.object({
+  address: z.string(),
+}).passthrough();
+
+const PhoneEntrySchema = z.object({
+  number: z.string(),
+}).passthrough();
+
+/** Addresses left fully open — component structure unprobed on Stalwart. */
+const AddressEntrySchema = z.record(z.string(), z.unknown());
+
+const OrganizationEntrySchema = z.object({
+  name: z.string().optional(),
+}).passthrough();
+
+const NoteEntrySchema = z.object({
+  note: z.string(),
+}).passthrough();
+
+export const ContactCardSchema = z.object({
+  "@type": z.literal("Card").optional(),
+  id: z.string().optional(),
+  uid: z.string().optional(),
+  kind: z.string().optional(),
+  name: CardNameSchema.optional(),
+  emails: z.record(z.string(), EmailEntrySchema).optional(),
+  phones: z.record(z.string(), PhoneEntrySchema).optional(),
+  addresses: z.record(z.string(), AddressEntrySchema).optional(),
+  organizations: z.record(z.string(), OrganizationEntrySchema).optional(),
+  notes: z.record(z.string(), NoteEntrySchema).optional(),
+}).passthrough() as unknown as z.ZodType<ContactCard>;
 
 /** ContactCard/query filter (typed after the RFC 9610 digest; keep text/email/name for now). */
 export interface ContactFilterCondition {
@@ -44,6 +84,9 @@ export interface ContactFilterCondition {
   [key: string]: unknown;
 }
 
-export const ContactFilterConditionSchema: z.ZodType<ContactFilterCondition> = todoSchema(
-  "schemas/jscontact ContactFilterConditionSchema",
-);
+export const ContactFilterConditionSchema = z.object({
+  text: z.string().optional(),
+  email: z.string().optional(),
+  name: z.string().optional(),
+  uid: z.string().optional(),
+}).passthrough() as unknown as z.ZodType<ContactFilterCondition>;

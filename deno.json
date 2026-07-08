@@ -10,7 +10,8 @@
     "dev:v2:http": "deno run --allow-net --allow-env --allow-read=.env v2.ts",
     "dev:v2:stdio": "MCP_TRANSPORT=stdio deno run --allow-net --allow-env --allow-read=.env v2.ts",
     "cli": "deno run --allow-net --allow-env --allow-read --allow-write src/cli/main.ts",
-    "check:v2": "deno check v2.ts 'src/core/**/*.ts' src/mcp/server.ts src/cli/main.ts"
+    "check:v2": "deno fmt --check src/core src/mcp src/cli tests/v2 v2.ts scripts/gen_tool_mapping.ts && deno lint src/core src/mcp src/cli tests/v2 v2.ts scripts/gen_tool_mapping.ts && deno check v2.ts 'src/core/**/*.ts' src/mcp/server.ts src/cli/main.ts scripts/gen_tool_mapping.ts && deno test tests/v2 --allow-env --allow-read",
+    "gen:tool-mapping": "deno run --allow-env --allow-read --allow-write=docs scripts/gen_tool_mapping.ts"
   },
   "imports": {
     "@mcp/client": "npm:@modelcontextprotocol/sdk@1.29.0/client/index.js",
@@ -21,6 +22,7 @@
     "@mcp/shared/protocol": "npm:@modelcontextprotocol/sdk@1.29.0/shared/protocol.js",
     "@mcp/types": "npm:@modelcontextprotocol/sdk@1.29.0/types.js",
     "@nextcloud/cdav-library": "npm:@nextcloud/cdav-library@2.6.2",
+    "@std/assert": "jsr:@std/assert@^1.0.0",
     "@std/cli": "jsr:@std/cli@^1.0.0",
     "@std/dotenv": "jsr:@std/dotenv@0.225.7",
     "html-to-text": "npm:html-to-text@9.0.5",

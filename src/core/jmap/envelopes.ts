@@ -93,6 +93,11 @@ export interface SetOutcome<T = Record<string, unknown>> {
   failed: Record<string, SetError>;
   old_state?: string | null;
   new_state?: string;
+  /**
+   * True iff the /set produced ZERO successes (no created/updated/destroyed) but ≥1 failure —
+   * lets callers distinguish "everything failed" from "partial success" without re-counting.
+   */
+  allFailed: boolean;
 }
 
 /** Raw method response triple. */
@@ -103,16 +108,28 @@ export type MethodResponse = [string, Record<string, unknown>, string];
  * state → state). Does NOT project — callers map items through core/projections.ts.
  */
 export function envelopeFromGet<T = Record<string, unknown>>(
-  _response: Record<string, unknown>,
+  response: Record<string, unknown>,
 ): Envelope<T> {
-  throw new Error("not implemented: core/jmap/envelopes envelopeFromGet");
+  const list = Array.isArray(response.list) ? response.list as T[] : [];
+  const envelope: Envelope<T> = { items: list };
+  const notFound = response.notFound;
+  if (Array.isArray(notFound) && notFound.length > 0) {
+    envelope.not_found = notFound as Id[];
+  }
+  if (typeof response.state === "string") envelope.state = response.state;
+  return envelope;
 }
 
 /** Normalize a Foo/query response body: ids → items, total?, queryState → state, position. */
 export function envelopeFromQuery(
-  _response: Record<string, unknown>,
+  response: Record<string, unknown>,
 ): Envelope<Id> & { position?: number } {
-  throw new Error("not implemented: core/jmap/envelopes envelopeFromQuery");
+  const ids = Array.isArray(response.ids) ? response.ids as Id[] : [];
+  const envelope: Envelope<Id> & { position?: number } = { items: ids };
+  if (typeof response.total === "number") envelope.total = response.total;
+  if (typeof response.queryState === "string") envelope.state = response.queryState;
+  if (typeof response.position === "number") envelope.position = response.position;
+  return envelope;
 }
 
 /**
@@ -120,9 +137,41 @@ export function envelopeFromQuery(
  * `failed`. Never throws on per-item failures — that is the point.
  */
 export function setOutcome<T = Record<string, unknown>>(
-  _response: Record<string, unknown>,
+  response: Record<string, unknown>,
 ): SetOutcome<T> {
-  throw new Error("not implemented: core/jmap/envelopes setOutcome");
+  const asRecord = (value: unknown): Record<string, T | null> =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, T | null>
+      : {};
+
+  const created = asRecord(response.created) as Record<string, T>;
+  const updated = asRecord(response.updated);
+  const destroyed = Array.isArray(response.destroyed) ? response.destroyed as Id[] : [];
+
+  const failed: Record<string, SetError> = {};
+  for (const key of ["notCreated", "notUpdated", "notDestroyed"] as const) {
+    const map = response[key];
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      for (const [id, err] of Object.entries(map as Record<string, SetError>)) {
+        failed[id] = err;
+      }
+    }
+  }
+
+  const successCount = Object.keys(created).length + Object.keys(updated).length +
+    destroyed.length;
+  const failureCount = Object.keys(failed).length;
+
+  const outcome: SetOutcome<T> = {
+    created,
+    updated,
+    destroyed,
+    failed,
+    allFailed: successCount === 0 && failureCount > 0,
+  };
+  if ("oldState" in response) outcome.old_state = response.oldState as string | null;
+  if (typeof response.newState === "string") outcome.new_state = response.newState;
+  return outcome;
 }
 
 /**
@@ -130,9 +179,19 @@ export function setOutcome<T = Record<string, unknown>>(
  * JmapMethodError when the slot holds ["error", ...].
  */
 export function expectResponse(
-  _responses: MethodResponse[],
-  _method: string,
-  _callId: string,
+  responses: MethodResponse[],
+  method: string,
+  callId: string,
 ): Record<string, unknown> {
-  throw new Error("not implemented: core/jmap/envelopes expectResponse");
+  const match = responses.find((r) => r[2] === callId);
+  if (!match) {
+    throw new JmapMethodError(method, callId, {
+      type: "invalidResultReference",
+      description: `No method response for call id "${callId}".`,
+    });
+  }
+  if (match[0] === "error") {
+    throw new JmapMethodError(method, callId, match[1] as MethodError);
+  }
+  return match[1];
 }

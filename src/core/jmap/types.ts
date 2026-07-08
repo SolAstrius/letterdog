@@ -124,6 +124,31 @@ export interface Thread {
   emailIds: Id[];
 }
 
+/** The IANA-registered mailbox roles JMAP recognizes (lowercased). */
+export const MAILBOX_ROLES: readonly MailboxRole[] = [
+  "inbox",
+  "archive",
+  "drafts",
+  "sent",
+  "trash",
+  "junk",
+  "all",
+  "flagged",
+  "important",
+];
+
+/**
+ * Build a role → mailbox-id lookup from a list of mailboxes (role-less mailboxes skipped). At
+ * most one mailbox per role per account, so the last one wins on the theoretical duplicate.
+ */
+export function mailboxRoleMap(mailboxes: Mailbox[]): Record<string, Id> {
+  const map: Record<string, Id> = {};
+  for (const mailbox of mailboxes) {
+    if (mailbox.role) map[mailbox.role] = mailbox.id;
+  }
+  return map;
+}
+
 export interface Identity {
   id: Id;
   name?: string;

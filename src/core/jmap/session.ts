@@ -71,9 +71,39 @@ export interface CoreLimits {
   maxObjectsInSet: number;
 }
 
+/**
+ * RFC 8620 §1.1 suggested minimums, used when a limit is absent from the core capability object.
+ * (maxObjectsInGet/InSet default 500; if the server omits them we still chunk conservatively.)
+ */
+const CORE_LIMIT_DEFAULTS: CoreLimits = {
+  maxSizeUpload: 50_000_000,
+  maxSizeRequest: 10_000_000,
+  maxCallsInRequest: 16,
+  maxObjectsInGet: 500,
+  maxObjectsInSet: 500,
+};
+
 /** Extract CoreLimits from a session's urn:ietf:params:jmap:core capability object. */
-export function coreLimits(_session: JmapSession): CoreLimits {
-  throw new Error("not implemented: core/jmap/session coreLimits");
+export function coreLimits(session: JmapSession): CoreLimits {
+  const core = session.capabilities?.[CAPABILITIES.core] as Record<string, unknown> | undefined;
+  const num = (key: keyof CoreLimits): number => {
+    const raw = core?.[key];
+    return typeof raw === "number" && Number.isFinite(raw) && raw > 0
+      ? raw
+      : CORE_LIMIT_DEFAULTS[key];
+  };
+  return {
+    maxSizeUpload: num("maxSizeUpload"),
+    maxSizeRequest: num("maxSizeRequest"),
+    maxCallsInRequest: num("maxCallsInRequest"),
+    maxObjectsInGet: num("maxObjectsInGet"),
+    maxObjectsInSet: num("maxObjectsInSet"),
+  };
+}
+
+interface CacheEntry {
+  session: JmapSession;
+  expiresAt: number;
 }
 
 /**
@@ -82,17 +112,25 @@ export function coreLimits(_session: JmapSession): CoreLimits {
  * changes. Never key by (or store) the raw credential.
  */
 export class SessionCache {
+  private readonly entries = new Map<string, CacheEntry>();
+
   constructor(private readonly ttlMs: number) {}
 
-  get(_fingerprint: string): JmapSession | undefined {
-    throw new Error("not implemented: core/jmap/session SessionCache.get");
+  get(fingerprint: string): JmapSession | undefined {
+    const entry = this.entries.get(fingerprint);
+    if (!entry) return undefined;
+    if (Date.now() >= entry.expiresAt) {
+      this.entries.delete(fingerprint);
+      return undefined;
+    }
+    return entry.session;
   }
 
-  put(_fingerprint: string, _session: JmapSession): void {
-    throw new Error("not implemented: core/jmap/session SessionCache.put");
+  put(fingerprint: string, session: JmapSession): void {
+    this.entries.set(fingerprint, { session, expiresAt: Date.now() + this.ttlMs });
   }
 
-  invalidate(_fingerprint: string): void {
-    throw new Error("not implemented: core/jmap/session SessionCache.invalidate");
+  invalidate(fingerprint: string): void {
+    this.entries.delete(fingerprint);
   }
 }
