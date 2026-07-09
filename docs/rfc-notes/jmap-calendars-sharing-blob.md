@@ -308,6 +308,15 @@ Stalwart v0.16.11 serves a **hybrid** of RFC 8984 and JSCalendar-bis shapes:
   `utcStart`/`utcEnd` are returned when requested.
 - `expandRecurrences: true` without both `after` and `before` ⇒ `invalidArguments` ("Both 'after'
   and 'before' filters are required when expanding recurrences").
+- **One more bis rename (probed 2026-07-09): `recurrenceRules` → `recurrenceRule` (singular),
+  `excludedRecurrenceRules` → `excludedRecurrenceRule`.** The RFC 8984 plural names are REJECTED
+  on `/set` create (`invalidProperties`, even for a minimal rule) and never returned by `/get`;
+  the singular bis names round-trip fine (create + read verified). Synthetic instance ids are
+  also generated for NON-recurring events (`eaaa<base>` observed). `CalendarEvent/set` targeting
+  a synthetic id is rejected "not yet supported" upstream (discussion stalwart#2923, unmerged
+  fix) — occurrence-scoped edits must patch base `recurrenceOverrides`. `Link.blobId` is silently
+  dropped on create/update despite the #2431 fix claiming an error is returned (regression, calendar
+  Links path).
 
 Consequence for v2 schemas: organizer/participant address fields should be modeled as a union
 (accept both `replyTo`-map and `organizerCalendarAddress`; both `sendTo` and `calendarAddress` on
