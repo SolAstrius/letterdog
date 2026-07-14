@@ -152,6 +152,14 @@ Mutable filter/sort props force affected ids into both removed+added. Errors: `t
   notCopied: Id[SetError]|null}`.
 - Any existing blobId in the account is reusable in creates (e.g. re-attach an old attachment
   without download/upload). Server MAY re-issue a new blobId on create and must report it back.
+- **Stalwart quirk (probed live 2026-07-14, v0.16.11): a `#creationId` back-reference to an
+  in-request `Blob/upload` is NOT resolved inside `bodyStructure.blobId`.** An `Email/set` create
+  whose bodyStructure references a same-request-uploaded blob as `blobId:"#att0"` is rejected with
+  `invalidProperties` / "Cannot set property" / `["bodyStructure/blobId"]`; the chained
+  `EmailSubmission/set` then fails on `["#emailId"]` (cascade, not a second bug). Swapping in the
+  CONCRETE blobId the same upload returned makes the create succeed. Consequence: attachments must
+  be uploaded to a real blobId (HTTP upload endpoint) BEFORE the Email/set — do not chain via
+  `#creationId`. Fixed in src/core/ops/mail_compose.ts (planMessageAttachments always uploads first).
 
 ### 1.8 EventSource (brief)
 

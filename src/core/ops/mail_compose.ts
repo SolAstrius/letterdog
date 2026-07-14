@@ -51,7 +51,7 @@ import {
   planAttachments,
   uploadedAttachmentPart,
 } from "../compose.ts";
-import type { AttachmentBodyPart, PendingUpload } from "../compose.ts";
+import type { AttachmentBodyPart } from "../compose.ts";
 import type { AttachmentInput, ComposeEmailInput } from "../schemas/mail.ts";
 import { AddressInputSchema, AttachmentInputSchema, KeywordSchema } from "../schemas/mail.ts";
 import {
@@ -75,9 +75,6 @@ import { project, type ProjectionContext, type ProjectionMode } from "../project
 // Constants
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Below this combined size we inline attachment bytes via in-request Blob/upload (#creationId
- * chaining, no extra round-trip); at/above it we POST to the HTTP upload endpoint. */
-const INLINE_BLOB_MAX_BYTES = 256 * 1024;
 /** SSRF guard: hard cap on bytes fetched from a `url` attachment source. */
 const URL_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -176,12 +173,8 @@ async function fetchMailboxIndex(
 // ────────────────────────────────────────────────────────────────────────────
 
 interface AttachmentPlan {
-  /** Method calls to prepend (Blob/upload for the inlined sources), keyed callId "blobUpload". */
-  preCalls: MethodCall[];
-  /** Resolved body parts (blob_id sources + already-uploaded HTTP-endpoint sources). */
+  /** Resolved body parts — all concrete blobIds (blob_id sources + freshly uploaded bytes). */
   bodyParts: AttachmentBodyPart[];
-  /** Pending in-request uploads: creationId → its eventual body part metadata. */
-  inlineParts: { creationId: string; meta: PendingUpload }[];
 }
 
 /** Normalize a text-source attachment arg into the base64 form planAttachments understands. */
@@ -248,15 +241,17 @@ async function fetchUrlAttachment(
 
 /**
  * Plan all attachment sources for one message. blob_id sources pass through; content_base64/text
- * and url sources become raw bytes, then split by size: small ones ride an in-request Blob/upload
- * (chained via #creationId, no extra HTTP round-trip), large ones POST to the upload endpoint now.
+ * and url sources become raw bytes, then every non-blob source is POSTed to the HTTP upload
+ * endpoint to obtain a concrete blobId. (Stalwart rejects #creationId back-references inside
+ * bodyStructure.blobId, so an in-request Blob/upload chain does not work — the Email/set create
+ * needs a concrete blobId that already exists on the server.)
  */
-async function planMessageAttachments(
+export async function planMessageAttachments(
   ctx: OpContext,
   account: AccountRef,
   inputs: AttachmentArg[] | undefined,
 ): Promise<AttachmentPlan> {
-  const plan: AttachmentPlan = { preCalls: [], bodyParts: [], inlineParts: [] };
+  const plan: AttachmentPlan = { bodyParts: [] };
   if (!inputs || inputs.length === 0) return plan;
 
   // Pre-fetch url sources (guarded) so planAttachments sees concrete bytes.
@@ -282,37 +277,17 @@ async function planMessageAttachments(
   const { bodyParts, uploads } = await planAttachments(coerced, account.accountId);
   plan.bodyParts.push(...bodyParts);
 
-  const inlineCreates: Record<string, unknown> = {};
-  let inlineIndex = 0;
+  // Upload every non-blob source to a concrete blobId via the HTTP upload endpoint, then reference
+  // it directly in the body part. One round-trip per attachment, but it is the only shape Stalwart
+  // accepts — a #creationId reference to an in-request Blob/upload is rejected on Email/set create.
   for (const upload of uploads) {
-    if (upload.bytes.byteLength < INLINE_BLOB_MAX_BYTES) {
-      // In-request Blob/upload create (RFC 9404): base64 data source, chained via #creationId.
-      const creationId = `att${inlineIndex++}`;
-      let binary = "";
-      for (const b of upload.bytes) binary += String.fromCharCode(b);
-      inlineCreates[creationId] = {
-        data: [{ "data:asBase64": btoa(binary) }],
-        type: upload.type,
-      };
-      plan.inlineParts.push({ creationId, meta: upload });
-    } else {
-      // Too large for the request budget — HTTP upload endpoint now.
-      const uploaded = await ctx.jmap.uploadBlob(
-        ctx.actor,
-        account.accountId,
-        upload.bytes,
-        upload.type,
-      );
-      plan.bodyParts.push(uploadedAttachmentPart(upload, uploaded.blobId));
-    }
-  }
-
-  if (Object.keys(inlineCreates).length > 0) {
-    plan.preCalls.push([
-      "Blob/upload",
-      { accountId: account.accountId, create: inlineCreates },
-      "blobUpload",
-    ]);
+    const uploaded = await ctx.jmap.uploadBlob(
+      ctx.actor,
+      account.accountId,
+      upload.bytes,
+      upload.type,
+    );
+    plan.bodyParts.push(uploadedAttachmentPart(upload, uploaded.blobId));
   }
   return plan;
 }
@@ -322,16 +297,13 @@ function filenameFromUrl(url: string): string {
   return last && last.length ? decodeURIComponent(last) : "attachment";
 }
 
-/** Merge the in-request-uploaded parts (referencing #creationId blobIds) onto a create payload. */
-function withInlineAttachments(
+/** Fold the plan's resolved attachment parts (all concrete blobIds) onto a create payload. */
+export function withAttachments(
   create: EmailCreatePayload,
   plan: AttachmentPlan,
 ): EmailCreatePayload {
-  const extraParts: AttachmentBodyPart[] = plan.inlineParts.map(({ creationId, meta }) =>
-    uploadedAttachmentPart(meta, `#${creationId}`)
-  );
-  if (extraParts.length === 0 && plan.bodyParts.length === 0) return create;
-  return mergeAttachmentsIntoStructure(create, [...plan.bodyParts, ...extraParts]);
+  if (plan.bodyParts.length === 0) return create;
+  return mergeAttachmentsIntoStructure(create, plan.bodyParts);
 }
 
 /**
@@ -519,7 +491,6 @@ function buildSend(args: {
   extraOnSuccess?: Record<string, Record<string, unknown>>;
 }): BuiltSend {
   const calls: MethodCall[] = [];
-  if (args.attachmentPlan) calls.push(...args.attachmentPlan.preCalls);
 
   const creationId = "email";
   const onSuccess: Record<string, Record<string, unknown>> = { ...(args.extraOnSuccess ?? {}) };
@@ -536,7 +507,7 @@ function buildSend(args: {
 
   if (args.create) {
     const withAtt = args.attachmentPlan
-      ? withInlineAttachments(args.create, args.attachmentPlan)
+      ? withAttachments(args.create, args.attachmentPlan)
       : args.create;
     const create = draftMailbox(withAtt, args.draftsId);
     calls.push(["Email/set", {
@@ -1491,12 +1462,11 @@ async function draftUpdateHandler(
   const create = buildCompose(compose, identity);
   const plan = await planMessageAttachments(ctx, account, args.attachments);
   const draftsId = mailboxes.byRole["drafts"];
-  const withAtt = withInlineAttachments(create, plan);
+  const withAtt = withAttachments(create, plan);
   const created = draftMailbox(withAtt, draftsId);
 
   // Create the replacement and destroy the old in one /set (server processes create before destroy).
   const calls: MethodCall[] = [];
-  if (plan.preCalls.length) calls.push(...plan.preCalls);
   calls.push([
     "Email/set",
     {
@@ -1562,8 +1532,8 @@ async function draftDeleteHandler(
 }
 
 /**
- * Persist a create payload as a draft in one Email/set (with inline Blob/upload preCalls) and
- * return a brief-projected envelope. Shared by reply(send:false), draft.create.
+ * Persist a create payload as a draft in one Email/set (attachments already uploaded to concrete
+ * blobIds) and return a brief-projected envelope. Shared by reply(send:false), draft.create.
  */
 async function draftFromCreate(
   ctx: OpContext,
@@ -1575,11 +1545,10 @@ async function draftFromCreate(
   fields: string[] | undefined,
 ): Promise<Envelope<unknown>> {
   const draftsId = mailboxes.byRole["drafts"];
-  const withAtt = withInlineAttachments(create, plan);
+  const withAtt = withAttachments(create, plan);
   const payload = draftMailbox(withAtt, draftsId);
 
   const calls: MethodCall[] = [];
-  if (plan.preCalls.length) calls.push(...plan.preCalls);
   calls.push([
     "Email/set",
     { accountId: account.accountId, create: { email: payload } },

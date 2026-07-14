@@ -129,6 +129,28 @@ async function calendarNameMap(
   return map;
 }
 
+/** The account's default calendar id (isDefault:true), else the first calendar. Undefined if none. */
+async function defaultCalendarId(
+  ctx: OpContext,
+  auth: JmapAuth,
+  accountId: Id,
+): Promise<string | undefined> {
+  try {
+    const res = await ctx.jmap.call(auth, USING_CALENDARS, "Calendar/get", {
+      accountId,
+      ids: null,
+      properties: ["id", "isDefault"],
+    });
+    const list = Array.isArray(res.list)
+      ? res.list as Array<{ id?: string; isDefault?: boolean }>
+      : [];
+    const chosen = list.find((c) => c.isDefault && c.id) ?? list.find((c) => c.id);
+    return chosen?.id;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Fetch the caller's own ParticipantIdentity calendarAddresses (lowercased, for rsvp matching). */
 async function ownParticipantAddresses(
   ctx: OpContext,
@@ -515,10 +537,11 @@ const createEvents = defineOp({
     "virtualLocations (video-call URIs); links/attachments; all-day (showWithoutTime), floating " +
     "time (timeZone null), freeBusyStatus, privacy, priority, color, keywords; utcStart/utcEnd " +
     "write shortcut. `start` is wall-clock LocalDateTime interpreted in timeZone. Server-set " +
-    "props (id/uid/created/…) are rejected. send_invitations (default false) controls iTIP: true " +
-    "emails every participant an invitation, false creates the event WITHOUT notifying anyone — " +
-    "pick deliberately. Confirmation is only required when send_invitations is true. Use is_draft " +
-    "to stage without any scheduling side effects.",
+    'props (id/uid/created/…) are rejected. calendarIds is an object like {"<id>": true}; omit ' +
+    "it and the event lands in your default calendar (no need to list_calendars first). " +
+    "send_invitations (default false) controls iTIP: true emails every participant an invitation, " +
+    "false creates the event WITHOUT notifying anyone — pick deliberately. Confirmation is only " +
+    "required when send_invitations is true. Use is_draft to stage without any scheduling side effects.",
   input: createEventsInput,
   annotations: { destructive: false },
   confirmClass: "outward",
@@ -531,12 +554,28 @@ const createEvents = defineOp({
       args.account_id,
     );
 
-    // Build the create map (creationId → event body). Fold is_draft into each body.
+    // Any event without an explicit calendar is placed in the account's default calendar, so
+    // callers don't have to list_calendars first — Stalwart rejects a create with no calendarIds.
+    const needsDefault = args.events.some((e) => {
+      const ids = (e as TypedEvent).calendarIds;
+      return !ids || Object.keys(ids).length === 0;
+    });
+    const fallbackCalendarId = needsDefault
+      ? await defaultCalendarId(ctx, ctx.actor, accountId)
+      : undefined;
+
+    // Build the create map (creationId → event body). Fold is_draft + default calendar into each.
     const create: Record<string, TypedEvent> = {};
     let recipientCount = 0;
     args.events.forEach((event, i) => {
       const body: TypedEvent = { ...(event as TypedEvent) };
       if (args.is_draft) body.isDraft = true;
+      if (fallbackCalendarId) {
+        const ids = body.calendarIds;
+        if (!ids || Object.keys(ids).length === 0) {
+          body.calendarIds = { [fallbackCalendarId]: true };
+        }
+      }
       create[`e${i}`] = body;
       recipientCount += participantRecipientCount(body);
     });
