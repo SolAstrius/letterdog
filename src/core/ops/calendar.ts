@@ -151,6 +151,64 @@ async function defaultCalendarId(
   }
 }
 
+/** The account's own organizer address: default ParticipantIdentity calendarAddress, else first. */
+async function defaultCalendarAddress(
+  ctx: OpContext,
+  auth: JmapAuth,
+  accountId: Id,
+): Promise<string | undefined> {
+  try {
+    const res = await ctx.jmap.call(auth, USING_CALENDARS, "ParticipantIdentity/get", {
+      accountId,
+      ids: null,
+    });
+    const list = Array.isArray(res.list)
+      ? res.list as Array<{ calendarAddress?: string; isDefault?: boolean }>
+      : [];
+    const chosen = list.find((p) => p.isDefault && p.calendarAddress) ??
+      list.find((p) => p.calendarAddress);
+    return chosen?.calendarAddress;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Apply create-time defaults to one event body before it hits CalendarEvent/set:
+ * - is_draft flag,
+ * - default calendar when calendarIds is absent (Stalwart rejects a create with none),
+ * - a generated uid when none is present,
+ * - an organizer (organizerCalendarAddress) when the event has participants but none is set.
+ *
+ * The last two are what make send_invitations actually deliver. Stalwart v0.16.11 does NOT, on a
+ * JMAP create, auto-assign a UID or derive an ORGANIZER from the owner participant — and iTIP
+ * scheduling silently no-ops without BOTH (itip_snapshot → MissingUid / NoSchedulingInfo, which
+ * the server swallows), so external attendees are never emailed. RFC 8984 makes both server-set,
+ * so we mint them here (acting as that server). The schema rejects caller-supplied uid /
+ * organizerCalendarAddress, so in practice we always generate the uid and set the organizer.
+ */
+export function applyEventCreateDefaults(
+  event: TypedEvent,
+  opts: { isDraft?: boolean; fallbackCalendarId?: string; uid: string; organizerAddress?: string },
+): TypedEvent {
+  const body: TypedEvent = { ...event };
+  if (opts.isDraft) body.isDraft = true;
+  const ids = body.calendarIds;
+  if ((!ids || Object.keys(ids).length === 0) && opts.fallbackCalendarId) {
+    body.calendarIds = { [opts.fallbackCalendarId]: true };
+  }
+  if (!body.uid) body.uid = opts.uid;
+  // An event with participants needs an ORGANIZER for iTIP to fire; Stalwart doesn't set one on
+  // JMAP create, so mint it from the account's own calendar address when the event has attendees
+  // and no organizer is present.
+  const hasParticipants = !!body.participants && Object.keys(body.participants).length > 0;
+  const hasOrganizer = !!body.organizerCalendarAddress || !!body.replyTo;
+  if (hasParticipants && !hasOrganizer && opts.organizerAddress) {
+    body.organizerCalendarAddress = opts.organizerAddress;
+  }
+  return body;
+}
+
 /** Fetch the caller's own ParticipantIdentity calendarAddresses (lowercased, for rsvp matching). */
 async function ownParticipantAddresses(
   ctx: OpContext,
@@ -537,7 +595,9 @@ const createEvents = defineOp({
     "virtualLocations (video-call URIs); links/attachments; all-day (showWithoutTime), floating " +
     "time (timeZone null), freeBusyStatus, privacy, priority, color, keywords; utcStart/utcEnd " +
     "write shortcut. `start` is wall-clock LocalDateTime interpreted in timeZone. Server-set " +
-    'props (id/uid/created/…) are rejected. calendarIds is an object like {"<id>": true}; omit ' +
+    "props (id/uid/created/…) are rejected; a uid — and, for events with participants, an organizer " +
+    "— are auto-assigned (both required for iTIP invitations to actually send). calendarIds is an " +
+    'object like {"<id>": true}; omit ' +
     "it and the event lands in your default calendar (no need to list_calendars first). " +
     "send_invitations (default false) controls iTIP: true emails every participant an invitation, " +
     "false creates the event WITHOUT notifying anyone — pick deliberately. Confirmation is only " +
@@ -564,18 +624,30 @@ const createEvents = defineOp({
       ? await defaultCalendarId(ctx, ctx.actor, accountId)
       : undefined;
 
-    // Build the create map (creationId → event body). Fold is_draft + default calendar into each.
+    // An event carrying participants needs an organizer for iTIP; look up the account's own
+    // calendar address once if any event has attendees but no organizer set.
+    const needsOrganizer = args.events.some((e) => {
+      const ev = e as TypedEvent;
+      const hasParticipants = !!ev.participants && Object.keys(ev.participants).length > 0;
+      const hasOrganizer = !!ev.organizerCalendarAddress || !!ev.replyTo;
+      return hasParticipants && !hasOrganizer;
+    });
+    const organizerAddress = needsOrganizer
+      ? await defaultCalendarAddress(ctx, ctx.actor, accountId)
+      : undefined;
+
+    // Build the create map (creationId → event body). Fold is_draft, default calendar, a minted
+    // uid, and an organizer into each (see applyEventCreateDefaults — uid + organizer are what make
+    // send_invitations actually deliver iTIP invites).
     const create: Record<string, TypedEvent> = {};
     let recipientCount = 0;
     args.events.forEach((event, i) => {
-      const body: TypedEvent = { ...(event as TypedEvent) };
-      if (args.is_draft) body.isDraft = true;
-      if (fallbackCalendarId) {
-        const ids = body.calendarIds;
-        if (!ids || Object.keys(ids).length === 0) {
-          body.calendarIds = { [fallbackCalendarId]: true };
-        }
-      }
+      const body = applyEventCreateDefaults(event as TypedEvent, {
+        isDraft: args.is_draft,
+        fallbackCalendarId,
+        uid: crypto.randomUUID(),
+        organizerAddress,
+      });
       create[`e${i}`] = body;
       recipientCount += participantRecipientCount(body);
     });
