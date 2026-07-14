@@ -12,7 +12,9 @@ The backend it fronts is a self-hosted [Stalwart](https://stalw.art) server (JMA
 the raw-iCalendar escape hatch), but the core targets JMAP-the-standard through a provider adapter.
 Design: [docs/v2-design.md](docs/v2-design.md); normative contracts and op inventory:
 [docs/v2-contracts.md](docs/v2-contracts.md); generated surface map:
-[docs/tool-mapping.md](docs/tool-mapping.md).
+[docs/tool-mapping.md](docs/tool-mapping.md). Live Stalwart deviations the connector works around:
+[docs/stalwart-conformance.md](docs/stalwart-conformance.md) (per-RFC detail in
+[docs/rfc-notes/](docs/rfc-notes/)).
 
 The v1 server (`main.ts`, `src/*.ts`, `src/tools/`) remains deployed and untouched; v2 lives in
 `src/core/`, `src/mcp/`, `src/cli/`, entrypoint `v2.ts`.
