@@ -52,6 +52,28 @@ Local auth: put `STALWART_BEARER=...` in `.env` (or the environment). The HTTP s
 request's `Authorization` header verbatim to Stalwart — the env bearer is a local-dev / stdio
 fallback only (`STALWART_ALLOW_ENV_BEARER_FALLBACK`).
 
+### OAuth (MCP resource server)
+
+The HTTP transport doubles as a minimal MCP OAuth **resource server** backed by Stalwart's own
+OAuth2/OIDC server (Stalwart *is* the authorization server — no separate IdP). Two things make an
+OAuth-capable client log in automatically instead of needing a pasted token:
+
+- `GET /.well-known/oauth-protected-resource` → RFC 9728 metadata listing Stalwart as the
+  `authorization_servers` entry.
+- A missing/rejected token yields `401` with
+  `WWW-Authenticate: Bearer ... resource_metadata="<this-host>/.well-known/oauth-protected-resource"`.
+
+The client then discovers Stalwart, dynamically registers, runs auth-code + PKCE against Stalwart's
+`/login`, and calls back with a Stalwart access token — which the connector forwards to Stalwart
+exactly like a pasted bearer. The connector never issues tokens, holds no client secret, and is
+never in the redirect path. **Direct bearer pass-through still works unchanged**: a client that
+already sends `Authorization: Bearer …` never sees the challenge.
+
+Set `PUBLIC_BASE_URL` to the connector's public origin (e.g. `https://mcp.mail.astrius.ink`) so the
+advertised resource id and metadata URL are correct; when unset it is derived per-request from
+`X-Forwarded-Proto` + `Host`. Set `OAUTH_PROTECTED_RESOURCE=false` to disable this and restore the
+legacy bare `Bearer`/`Basic` challenge.
+
 ## CLI install
 
 The CLI is a Deno program; compile it to a binary on PATH:
@@ -130,6 +152,13 @@ executes, `--yes` approves routine outward sends.
 | `SESSION_CACHE_TTL_MS`               | `60000`                    | JMAP session cache per actor       |
 | `STALWART_ALLOW_ENV_BEARER_FALLBACK` | stdio: true, http: false   | allow env bearer when no header    |
 | `MCP_TRANSPORT` / `PORT`             | `http` / `8787`            | transport / listen port            |
+| `PUBLIC_BASE_URL`                    | derived from Host header   | public origin = OAuth resource id  |
+| `OAUTH_PROTECTED_RESOURCE`           | `true`                     | serve RFC 9728 metadata + 401 challenge |
+| `OAUTH_AUTHORIZATION_SERVERS`        | `STALWART_BASE_URL`        | advertised authorization server(s) |
+| `OAUTH_SCOPES`                       | Stalwart scopes            | advertised `scopes_supported`      |
+| `OAUTH_RESOURCE`                     | the authorization server   | RFC 8707 resource advertised (Stalwart only accepts its own issuer) |
+| `OAUTH_PROXY`                        | `false`                    | front Stalwart's OAuth for zero-config MCP-client login (public-PKCE DCR downgrade + resource/iss rewrites) |
+| `REGISTRATION_BEARER`                | _(unset)_                  | optional Stalwart API key to register confidential clients instead of the public downgrade |
 
 Production MCP endpoint: `https://mcp.mail.astrius.ink/mcp` (k8s manifest in
 [k8s/deployment.yaml](k8s/deployment.yaml)).

@@ -33,6 +33,17 @@ spec:
               value: "false"
             - name: CONFIRM_POLICY
               value: minimal
+            # OAuth resource-server: public origin = metadata URL host (Stalwart is the AS).
+            - name: PUBLIC_BASE_URL
+              value: https://mcp.mail.astrius.ink
+            # Advertised RFC 8707 resource (used only in plain resource-server mode). MUST be the
+            # Stalwart issuer, not the connector URL — Stalwart rejects any other resource indicator.
+            - name: OAUTH_RESOURCE
+              value: https://mail.astrius.ink
+            # OAuth AS proxy: connector fronts Stalwart's OAuth so MCP clients get zero-config login
+            # (public-PKCE DCR downgrade + resource/iss rewrites). No credential required.
+            - name: OAUTH_PROXY
+              value: "true"
             # Created out-of-band (not in git):
             #   kubectl -n stalwart-jmap-mcp create secret generic letterdog-confirm \
             #     --from-literal=confirmation-secret="$(openssl rand -base64 32)"

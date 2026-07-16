@@ -12,7 +12,10 @@
  *   config.enableSyncTools (they are CLI-surface anyway; filter regardless for safety).
  *
  * Transports mirror v1 src/server/transports.ts: HTTP (WebStandardStreamableHTTPServerTransport,
- * stateless, /healthz + /readyz, 401 without Authorization) and stdio.
+ * stateless, /healthz + /readyz, 401 without Authorization) and stdio. The HTTP transport is also a
+ * minimal MCP OAuth resource server: it serves RFC 9728 protected-resource metadata pointing at
+ * Stalwart as the authorization server and answers a missing token with a `resource_metadata`
+ * challenge, so clients can log in to Stalwart directly. Bearer pass-through is otherwise unchanged.
  *
  * Auth is REIMPLEMENTED in the v2 namespace here (not imported from v1 src/auth.ts) so the two
  * codebases stay independent, per the builder brief.
@@ -38,6 +41,7 @@ import { CalDavClient } from "../../src/caldav.ts";
 import { stalwartProvider } from "../core/provider/stalwart.ts";
 import { actorFingerprint } from "../core/safety.ts";
 import { compactJson } from "../core/projections.ts";
+import { handleOAuthProxyRequest } from "./oauth_proxy.ts";
 
 /** Server metadata (design "Naming": Letterdog is the product). */
 export const SERVER_NAME = "letterdog";
@@ -124,6 +128,52 @@ function authInfoToken(extra: ToolExtra): string | undefined {
   const token = extra.authInfo?.token;
   if (!token) return undefined;
   return parseAuthorizationHeader(token) ?? `Bearer ${token}`;
+}
+
+// --- OAuth 2.0 protected-resource metadata (RFC 9728) -------------------------------------------
+//
+// The connector is a pure MCP OAuth *resource server*: it advertises Stalwart as the authorization
+// server and keeps forwarding the caller's bearer to Stalwart (which validates it). It never issues
+// tokens, holds no client credentials, and is never in the browser redirect path — the MCP client
+// runs the auth-code + PKCE flow against Stalwart directly. Clients that already carry a bearer (the
+// legacy path) never see the 401 challenge and are unaffected.
+
+/** Path of the RFC 9728 metadata document; also matches the …/mcp path-suffixed form clients may try. */
+const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
+
+const METADATA_CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type, MCP-Protocol-Version",
+};
+
+/** The connector's public origin as reached by the client — the OAuth resource identifier. */
+function resolveBaseUrl(config: V2Config, request: Request): string {
+  if (config.publicBaseUrl) return config.publicBaseUrl;
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host = request.headers.get("host");
+  if (host) return `${forwardedProto || "https"}://${host}`;
+  return config.stalwartBaseUrl;
+}
+
+/**
+ * RFC 9728 Protected Resource Metadata: which authorization server(s) protect this resource.
+ * In OAUTH_PROXY mode the connector IS the advertised AS and resource (baseUrl); otherwise `resource`
+ * is config.oauthResource (the Stalwart issuer, since Stalwart only accepts its own issuer as an RFC
+ * 8707 resource indicator — advertising the connector's URL breaks a direct login).
+ */
+function protectedResourceMetadata(config: V2Config, baseUrl: string): Record<string, unknown> {
+  return {
+    resource: config.oauthProxy ? baseUrl : config.oauthResource,
+    authorization_servers: config.oauthProxy ? [baseUrl] : config.oauthAuthorizationServers,
+    scopes_supported: config.oauthScopesSupported,
+    bearer_methods_supported: ["header"],
+  };
+}
+
+/** The value for the `resource_metadata` parameter of the 401 WWW-Authenticate challenge. */
+function resourceMetadataUrl(config: V2Config, request: Request): string {
+  return `${resolveBaseUrl(config, request)}${PROTECTED_RESOURCE_PATH}`;
 }
 
 /** Build the registry Actor from a resolved auth (fingerprint binds confirm tokens to the actor). */
@@ -251,20 +301,45 @@ export function startHttp(config: V2Config): void {
         envBearerFallback: config.allowEnvBearerFallback,
       });
     }
+    // OAuth AS proxy (OAUTH_PROXY mode): AS metadata + /register /authorize /callback /token.
+    // Unauthenticated by design — these ARE the auth endpoints. Returns null for non-proxy paths.
+    if (config.oauthProxy) {
+      const proxied = await handleOAuthProxyRequest(
+        request,
+        config,
+        resolveBaseUrl(config, request),
+      );
+      if (proxied) return proxied;
+    }
+
+    // OAuth 2.0 protected-resource metadata (RFC 9728): unauthenticated, CORS-open. Matches both the
+    // bare path and the RFC path-suffixed form (…/oauth-protected-resource/mcp) that some clients try.
+    if (config.oauthProtectedResource && url.pathname.startsWith(PROTECTED_RESOURCE_PATH)) {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: METADATA_CORS_HEADERS });
+      }
+      return Response.json(
+        protectedResourceMetadata(config, resolveBaseUrl(config, request)),
+        { headers: METADATA_CORS_HEADERS },
+      );
+    }
+
     if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 });
 
     if (
       !parseAuthorizationHeader(request.headers.get("authorization")) &&
       !(config.allowEnvBearerFallback && config.fallbackAuthorization)
     ) {
+      // Spec 401: point OAuth-capable clients at the protected-resource metadata so they discover
+      // Stalwart and log in. When the metadata endpoint is disabled, keep the legacy bare challenge.
+      const challenge = config.oauthProtectedResource
+        ? `Bearer realm="${SERVER_NAME}", resource_metadata="${
+          resourceMetadataUrl(config, request)
+        }"`
+        : `Bearer realm="${SERVER_NAME}", Basic realm="${SERVER_NAME}"`;
       return Response.json(
         { error: "Missing Authorization header." },
-        {
-          status: 401,
-          headers: {
-            "WWW-Authenticate": `Bearer realm="${SERVER_NAME}", Basic realm="${SERVER_NAME}"`,
-          },
-        },
+        { status: 401, headers: { "WWW-Authenticate": challenge } },
       );
     }
 
