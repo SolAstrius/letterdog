@@ -753,7 +753,8 @@ const replyOp = defineOp({
     "overridden: to/cc replace the derived recipients, bcc adds blind recipients, from/reply_to/" +
     "subject/headers/keywords work exactly as in send_email (from must align with the identity's " +
     "domain). The base subject is preserved (single Re:) unless subject is given. send:false drafts " +
-    "it in Drafts ($draft); send:true submits it and marks the parent $answered. Under the balanced " +
+    "it in Drafts ($draft); send:true submits it and marks the parent $answered; send_at (UTC) " +
+    "schedules delayed send via FUTURERELEASE. Under the balanced " +
     "policy a send to >3 recipients returns a confirm_token to repeat with.",
   input: {
     email_id: JmapIdSchema,
@@ -772,6 +773,7 @@ const replyOp = defineOp({
     headers: z.record(z.string(), z.string()).optional(),
     keywords: z.array(KeywordSchema).optional(),
     send: z.boolean().default(false),
+    send_at: z.string().optional(),
     confirm_token: ConfirmTokenSchema,
     ...bodyReadArgs,
   },
@@ -800,6 +802,7 @@ async function replyHandler(
     headers?: Record<string, string>;
     keywords?: string[];
     send: boolean;
+    send_at?: string;
     confirm_token?: string;
     account_id?: string;
     projection: ProjectionMode;
@@ -815,6 +818,11 @@ async function replyHandler(
     fetchIdentities(ctx.jmap, ctx.actor, account),
     fetchMailboxIndex(ctx.jmap, ctx.actor, account),
   ]);
+  if (args.send_at && !futureReleaseSupported(account)) {
+    throw new Error(
+      "send_at requested but the server does not advertise FUTURERELEASE delayed send",
+    );
+  }
   const parent = await fetchEmailForReply(ctx, account, args.email_id);
   // An explicit From binds the identity (envelope/DMARC alignment); otherwise the parent's
   // To address is only a soft hint for which identity to reply as.
@@ -865,6 +873,7 @@ async function replyHandler(
     identity,
     create,
     attachmentPlan: plan,
+    sendAt: args.send_at,
     draftsId: mailboxes.byRole["drafts"],
     sentId: mailboxes.byRole["sent"],
     // Mark the parent $answered on successful submission (a keyword patch on the parent id).
@@ -1170,16 +1179,26 @@ const forwardOp = defineOp({
     "recipients. Each original is reattached zero-copy by referencing its blobId as a " +
     "message/rfc822 part (no download/upload), preserving full MIME fidelity; set attach_original " +
     "false to inline-quote instead. Each forwarded original is marked $forwarded on success. " +
+    "to/cc/bcc set recipients; from/reply_to/subject/headers/keywords work exactly as in " +
+    "send_email (from must align with the identity's domain); send_at (UTC) schedules delayed send " +
+    "via FUTURERELEASE. " +
     "Batch-first: pass email_ids as an array; per-item failures surface in failed. Under balanced " +
     "policy, sending to >3 recipients returns a confirm_token to repeat the call with.",
   input: {
     email_ids: z.array(JmapIdSchema).min(1).max(50),
     to: z.array(AddressInputSchema).min(1),
     cc: z.array(AddressInputSchema).optional(),
+    bcc: z.array(AddressInputSchema).optional(),
     body_text: z.string().optional(),
     body_html: z.string().optional(),
     attach_original: z.boolean().optional(),
     identity_id: z.string().optional(),
+    from: AddressInputSchema.optional(),
+    reply_to: z.array(AddressInputSchema).optional(),
+    subject: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    keywords: z.array(KeywordSchema).optional(),
+    send_at: z.string().optional(),
     confirm_token: ConfirmTokenSchema,
     ...bodyReadArgs,
   },
@@ -1195,10 +1214,17 @@ async function forwardHandler(
     email_ids: string[];
     to: { name?: string; email: string }[];
     cc?: { name?: string; email: string }[];
+    bcc?: { name?: string; email: string }[];
     body_text?: string;
     body_html?: string;
     attach_original?: boolean;
     identity_id?: string;
+    from?: { name?: string; email: string };
+    reply_to?: { name?: string; email: string }[];
+    subject?: string;
+    headers?: Record<string, string>;
+    keywords?: string[];
+    send_at?: string;
     confirm_token?: string;
     account_id?: string;
     projection: ProjectionMode;
@@ -1211,10 +1237,19 @@ async function forwardHandler(
     fetchIdentities(ctx.jmap, ctx.actor, account),
     fetchMailboxIndex(ctx.jmap, ctx.actor, account),
   ]);
-  const identity = pickIdentity(identities, { identityId: args.identity_id });
+  if (args.send_at && !futureReleaseSupported(account)) {
+    throw new Error(
+      "send_at requested but the server does not advertise FUTURERELEASE delayed send",
+    );
+  }
+  // An explicit From binds the identity for envelope/DMARC alignment, as in send/reply.
+  const identity = pickIdentity(identities, {
+    identityId: args.identity_id,
+    fromEmail: args.from?.email,
+  });
 
   const recipientCount = new Set(
-    [...args.to, ...(args.cc ?? [])].map((a) => normalizeAddress(a.email)),
+    [...args.to, ...(args.cc ?? []), ...(args.bcc ?? [])].map((a) => normalizeAddress(a.email)),
   ).size;
 
   const gateResult = await gate(ctx, {
@@ -1244,14 +1279,21 @@ async function forwardHandler(
     const create = buildForward(original, identity, {
       to: args.to,
       cc: args.cc,
+      bcc: args.bcc,
       body_text: args.body_text,
       body_html: args.body_html,
       attach_original: args.attach_original,
+      from: args.from,
+      reply_to: args.reply_to,
+      subject: args.subject,
+      headers: args.headers,
+      keywords: args.keywords,
     });
     const built = buildSend({
       account,
       identity,
       create,
+      sendAt: args.send_at,
       draftsId: mailboxes.byRole["drafts"],
       sentId: mailboxes.byRole["sent"],
       extraOnSuccess: { [id]: { "keywords/$forwarded": true } },

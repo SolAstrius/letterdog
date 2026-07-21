@@ -245,6 +245,26 @@ Deno.test("buildForward in quote mode (attach_original:false) inlines the quoted
   assert("html" in bodyValues, "html body part emitted for HTML-bearing parent");
 });
 
+Deno.test("buildForward honors from/bcc/reply_to/subject/headers/keywords overrides", () => {
+  const fwd = buildForward(parentEmail(), IDENTITY, {
+    to: [{ email: "dana@example.com" }],
+    cc: [{ email: "carol@example.com" }],
+    bcc: [{ email: "audit@astrius.ink" }],
+    from: { name: "Sol", email: "sol@astrius.ink" },
+    reply_to: [{ email: "desk@astrius.ink" }],
+    subject: "Please review",
+    headers: { "X-Ref": "TICKET-9" },
+    keywords: ["$flagged"],
+  });
+  assertEquals(fwd.from, [{ name: "Sol", email: "sol@astrius.ink" }]);
+  assertEquals(fwd.cc, [{ email: "carol@example.com" }]);
+  assertEquals(fwd.bcc, [{ email: "audit@astrius.ink" }]);
+  assertEquals(fwd.replyTo, [{ email: "desk@astrius.ink" }]);
+  assertEquals(fwd.subject, "Please review");
+  assertEquals((fwd as Record<string, unknown>)["header:X-Ref"], "TICKET-9");
+  assertEquals(fwd.keywords, { "$flagged": true });
+});
+
 // ── buildCompose ─────────────────────────────────────────────────────────────────────────────────
 
 Deno.test("buildCompose uses the explicit from, applies keywords and custom headers", () => {

@@ -116,13 +116,25 @@ export function buildReply(
 }
 
 export interface ForwardOptions {
-  to: { name?: string; email: string }[];
-  cc?: { name?: string; email: string }[];
+  to: AddressInput[];
+  cc?: AddressInput[];
   body_text?: string;
   body_html?: string;
   identity_id?: string;
   /** true (default): zero-copy reattach original via its blobId as message/rfc822. */
   attach_original?: boolean;
+  /** Override the From header (must align with the chosen identity's domain). */
+  from?: AddressInput;
+  /** Blind recipients. */
+  bcc?: AddressInput[];
+  /** Override the Reply-To header (else the identity's). */
+  reply_to?: AddressInput[];
+  /** Override the subject (else the original's, with a single "Fwd: "). */
+  subject?: string;
+  /** Extra raw headers, emitted as header:<Name> convenience props. */
+  headers?: Record<string, string>;
+  /** Extra keywords to set on the forwarded message. */
+  keywords?: string[];
 }
 
 /**
@@ -156,12 +168,21 @@ export function buildForward(
     }]
     : [];
 
+  const replyTo = opts.reply_to ? opts.reply_to.map(addressOut) : identity.replyTo;
+  const cc = opts.cc?.map(addressOut) ?? [];
+  const bcc = opts.bcc?.map(addressOut) ?? [];
+  const headers = Object.entries(opts.headers ?? {});
   return {
-    from: [identityAddress(identity)],
-    ...(identity.replyTo ? { replyTo: identity.replyTo } : {}),
-    to: opts.to,
-    ...(opts.cc?.length ? { cc: opts.cc } : {}),
-    subject: forwardSubject(original.subject ?? undefined),
+    from: opts.from ? [addressOut(opts.from)] : [identityAddress(identity)],
+    ...(replyTo ? { replyTo } : {}),
+    to: opts.to.map(addressOut),
+    ...(cc.length ? { cc } : {}),
+    ...(bcc.length ? { bcc } : {}),
+    subject: opts.subject ?? forwardSubject(original.subject ?? undefined),
+    ...(opts.keywords?.length
+      ? { keywords: Object.fromEntries(opts.keywords.map((k) => [k, true])) }
+      : {}),
+    ...Object.fromEntries(headers.map(([name, value]) => [`header:${name}`, value])),
     ...bodyStructureCreate(bodyText, bodyHtml, attachments),
   };
 }
