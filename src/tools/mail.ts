@@ -721,17 +721,16 @@ function registerSendTools(server: McpServer, config: EnvConfig): void {
               accountId: account.accountId,
               create: {
                 send: {
-                  "#emailId": {
-                    resultOf: "emailSet",
-                    name: "Email/set",
-                    path: `/created/${createId}/id`,
-                  },
+                  // RFC 8620 §5.3 creation-id reference — ResultReferences are top-level-argument
+                  // only; Stalwart rejects `#emailId` inside a create object.
+                  emailId: `#${createId}`,
                   identityId,
                   ...(args.envelope ? { envelope: args.envelope } : {}),
                 },
               },
               onSuccessUpdateEmail: {
-                [`#${createId}`]: sentEmailPatch(mailboxes),
+                // RFC 8621 §7.5: `#` keys name the EmailSubmission creation id.
+                "#send": sentEmailPatch(mailboxes),
               },
             },
             "submissionSet",
@@ -818,10 +817,10 @@ function registerSendTools(server: McpServer, config: EnvConfig): void {
           { mailboxIds: [draftsId], keywords: { "$draft": true, "$seen": true } },
         );
         submissionCreate[`send${index}`] = {
-          "#emailId": { resultOf: "emailSet", name: "Email/set", path: `/created/${createId}/id` },
+          emailId: `#${createId}`,
           identityId,
         };
-        onSuccessUpdateEmail[`#${createId}`] = sentEmailPatch(mailboxes);
+        onSuccessUpdateEmail[`#send${index}`] = sentEmailPatch(mailboxes);
         if (typeof original.id === "string") {
           onSuccessUpdateEmail[original.id] = {
             [`keywords/${args.forwarded_keyword ?? "$Forwarded"}`]: true,

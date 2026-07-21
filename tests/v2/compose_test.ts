@@ -316,17 +316,17 @@ Deno.test("planSend composes Email/set + EmailSubmission/set with a #creationId 
   const [subMethod, subArgs] = plan.calls[1];
   assertEquals(subMethod, "EmailSubmission/set");
   const args = subArgs as {
-    create: { send: { "#emailId": unknown; identityId: string } };
+    create: { send: { emailId: string; identityId: string } };
     onSuccessUpdateEmail: Record<string, Record<string, unknown>>;
   };
   assertEquals(args.create.send.identityId, "id1");
   assertEquals(
-    args.create.send["#emailId"],
-    { resultOf: "emailSet", name: "Email/set", path: "/created/email/id" },
-    "creationId back-reference",
+    args.create.send.emailId,
+    "#email",
+    "RFC 8620 §5.3 creation-id string (Stalwart rejects ResultReferences inside create objects)",
   );
   assertEquals(
-    args.onSuccessUpdateEmail["#email"],
+    args.onSuccessUpdateEmail["#send"],
     {
       "keywords/$draft": null,
       "keywords/$seen": true,

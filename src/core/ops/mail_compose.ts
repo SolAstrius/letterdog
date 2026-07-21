@@ -551,14 +551,19 @@ function buildSend(args: {
       accountId: args.account.accountId,
       create: { [creationId]: create },
     }, "emailSet"]);
-    onSuccess[`#${creationId}`] = sentPatch(args.draftsId, args.sentId);
+    // RFC 8621 §7.5: a `#`-prefixed onSuccessUpdateEmail key names the *EmailSubmission*
+    // creation id (whose email gets patched), not the Email creation id.
+    onSuccess["#send"] = sentPatch(args.draftsId, args.sentId);
     calls.push([
       "EmailSubmission/set",
       {
         accountId: args.account.accountId,
         create: {
           send: {
-            "#emailId": ref("emailSet", "Email/set", `/created/${creationId}/id`),
+            // RFC 8620 §5.3 creation-id reference — NOT a ResultReference; `#property`
+            // back-refs are only valid as top-level method arguments and Stalwart rejects
+            // them inside create objects ("Field could not be set", ["#emailId"]).
+            emailId: `#${creationId}`,
             identityId: args.identity.id,
             ...(envelope ? { envelope } : {}),
           },

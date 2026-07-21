@@ -287,12 +287,15 @@ export function planSend(args: {
         accountId: args.accountId,
         create: {
           send: {
-            "#emailId": ref("emailSet", "Email/set", `/created/${creationId}/id`),
+            // RFC 8620 §5.3 creation-id reference — ResultReferences are top-level-argument
+            // only; Stalwart rejects `#emailId` inside a create object.
+            emailId: `#${creationId}`,
             identityId: args.identity.id,
             ...(envelope ? { envelope } : {}),
           },
         },
-        onSuccessUpdateEmail: { [`#${creationId}`]: onSuccessPatch },
+        // RFC 8621 §7.5: `#` keys name the EmailSubmission creation id, not the Email's.
+        onSuccessUpdateEmail: { "#send": onSuccessPatch },
       },
       "submissionSet",
     ]);
