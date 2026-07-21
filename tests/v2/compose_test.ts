@@ -184,6 +184,32 @@ Deno.test("buildReply carries the identity replyTo when set", () => {
   assertEquals(reply.replyTo, [{ email: "desk@astrius.ink" }]);
 });
 
+Deno.test("buildReply overrides replace derived recipients but keep threading", () => {
+  const parent = parentEmail();
+  const reply = buildReply(parent, IDENTITY, ["sol@astrius.ink"], {
+    reply_all: true,
+    to: [{ email: "billing@example.com" }],
+    cc: [{ name: "Ops", email: "ops@example.com" }],
+    bcc: [{ email: "audit@astrius.ink" }],
+    from: { name: "Sol", email: "sol@astrius.ink" },
+    reply_to: [{ email: "desk@astrius.ink" }],
+    subject: "Custom subject",
+    headers: { "X-Ref": "INV-4071790" },
+    keywords: ["$flagged"],
+  });
+  // Explicit to/cc win over reply-all derivation; bcc added.
+  assertEquals(reply.to, [{ email: "billing@example.com" }]);
+  assertEquals(reply.cc, [{ name: "Ops", email: "ops@example.com" }]);
+  assertEquals(reply.bcc, [{ email: "audit@astrius.ink" }]);
+  assertEquals(reply.from, [{ name: "Sol", email: "sol@astrius.ink" }]);
+  assertEquals(reply.replyTo, [{ email: "desk@astrius.ink" }]);
+  assertEquals(reply.subject, "Custom subject");
+  assertEquals((reply as Record<string, unknown>)["header:X-Ref"], "INV-4071790");
+  assertEquals(reply.keywords, { "$flagged": true });
+  // Threading is still derived from the parent regardless of overrides.
+  assertEquals(reply.inReplyTo, parent.messageId);
+});
+
 // ── buildForward ─────────────────────────────────────────────────────────────────────────────────
 
 Deno.test("buildForward reattaches the original zero-copy as a message/rfc822 part by default", () => {

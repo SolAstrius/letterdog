@@ -19,8 +19,7 @@
  */
 import { convert } from "html-to-text";
 import type { Email, EmailAddress, Id, Identity } from "./jmap/types.ts";
-import type { AttachmentInput, ComposeEmailInput } from "./schemas/mail.ts";
-import { ref } from "./jmap/client.ts";
+import type { AddressInput, AttachmentInput, ComposeEmailInput } from "./schemas/mail.ts";
 import type { MethodCall } from "./jmap/client.ts";
 
 /** The Email/set create payload compose functions produce (spec camelCase, wire shape). */
@@ -35,6 +34,22 @@ export interface ReplyOptions {
   identity_id?: string;
   /** Quote the parent body (plain "> " for text, blockquote for HTML). Default true. */
   quote?: boolean;
+  /** Override the From header (must align with the chosen identity's domain). */
+  from?: AddressInput;
+  /** Replace the auto-derived To (parent Reply-To/From) entirely. */
+  to?: AddressInput[];
+  /** Replace the reply_all-derived Cc entirely. */
+  cc?: AddressInput[];
+  /** Add Bcc recipients (parents carry none to derive). */
+  bcc?: AddressInput[];
+  /** Override the reply Reply-To header (else the identity's). */
+  reply_to?: AddressInput[];
+  /** Override the subject (else the parent's, with a single "Re: "). */
+  subject?: string;
+  /** Extra raw headers, emitted as header:<Name> convenience props. */
+  headers?: Record<string, string>;
+  /** Extra keywords to set on the drafted/sent message. */
+  keywords?: string[];
 }
 
 /**
@@ -51,9 +66,13 @@ export function buildReply(
 ): EmailCreatePayload {
   const own = normalizeAddressSet(ownAddresses);
   const replyTargets = nonEmptyAddresses(parent.replyTo) ?? nonEmptyAddresses(parent.from) ?? [];
-  const to = replyTargets;
+  // Explicit `to` replaces the auto-derived recipients entirely; otherwise reply to the sender.
+  const to = opts.to ? opts.to.map(addressOut) : replyTargets;
   let cc: EmailAddress[] = [];
-  if (opts.reply_all) {
+  if (opts.cc) {
+    // Explicit cc wins over any reply_all derivation.
+    cc = opts.cc.map(addressOut);
+  } else if (opts.reply_all) {
     // Reply-all adds parent To+Cc minus self and minus anyone already in `to`.
     const already = new Set(to.map((a) => normalizeAddress(a.email)));
     const pool = [...(nonEmptyAddresses(parent.to) ?? []), ...(nonEmptyAddresses(parent.cc) ?? [])];
@@ -62,6 +81,7 @@ export function buildReply(
       return !own.has(norm) && !already.has(norm);
     });
   }
+  const bcc = opts.bcc ? opts.bcc.map(addressOut) : [];
 
   const inReplyTo = nonEmptyStrings(parent.messageId);
   const parentRefs = nonEmptyStrings(parent.references) ?? nonEmptyStrings(parent.inReplyTo) ?? [];
@@ -76,14 +96,21 @@ export function buildReply(
     ? composeBodyHtml(opts.body_html, quote ? quoteHtml(parentHtmlBody(parent)) : "")
     : undefined;
 
+  const replyTo = opts.reply_to ? opts.reply_to.map(addressOut) : identity.replyTo;
+  const headers = Object.entries(opts.headers ?? {});
   return {
-    from: [identityAddress(identity)],
-    ...(identity.replyTo ? { replyTo: identity.replyTo } : {}),
+    from: opts.from ? [addressOut(opts.from)] : [identityAddress(identity)],
+    ...(replyTo ? { replyTo } : {}),
     to,
     ...(cc.length ? { cc } : {}),
-    subject: replySubject(parent.subject ?? undefined),
+    ...(bcc.length ? { bcc } : {}),
+    subject: opts.subject ?? replySubject(parent.subject ?? undefined),
     ...(inReplyTo ? { inReplyTo } : {}),
     ...(references.length ? { references } : {}),
+    ...(opts.keywords?.length
+      ? { keywords: Object.fromEntries(opts.keywords.map((k) => [k, true])) }
+      : {}),
+    ...Object.fromEntries(headers.map(([name, value]) => [`header:${name}`, value])),
     ...bodyStructureCreate(bodyText, bodyHtml, []),
   };
 }

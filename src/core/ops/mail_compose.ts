@@ -748,10 +748,13 @@ const replyOp = defineOp({
   description:
     "Reply to an email on the user's personal self-hosted mail (Letterdog). RFC-correct threading: " +
     "In-Reply-To = the parent's Message-Id, References = the parent's References + Message-Id, so " +
-    "the reply stays in-thread. Recipients come from the parent's Reply-To (else From); reply_all " +
-    "adds the parent's To+Cc minus your own addresses. The base subject is preserved (single Re:). " +
-    "send:false drafts it in Drafts ($draft); send:true submits it and marks the parent $answered. " +
-    "Under the balanced policy a send to >3 recipients returns a confirm_token to repeat with.",
+    "the reply stays in-thread. By default recipients come from the parent's Reply-To (else From) " +
+    "and reply_all adds the parent's To+Cc minus your own addresses, but every field can be " +
+    "overridden: to/cc replace the derived recipients, bcc adds blind recipients, from/reply_to/" +
+    "subject/headers/keywords work exactly as in send_email (from must align with the identity's " +
+    "domain). The base subject is preserved (single Re:) unless subject is given. send:false drafts " +
+    "it in Drafts ($draft); send:true submits it and marks the parent $answered. Under the balanced " +
+    "policy a send to >3 recipients returns a confirm_token to repeat with.",
   input: {
     email_id: JmapIdSchema,
     body_text: z.string().optional(),
@@ -760,6 +763,14 @@ const replyOp = defineOp({
     quote: z.boolean().optional(),
     attachments: z.array(AttachmentArgSchema).optional(),
     identity_id: z.string().optional(),
+    from: AddressInputSchema.optional(),
+    to: z.array(AddressInputSchema).optional(),
+    cc: z.array(AddressInputSchema).optional(),
+    bcc: z.array(AddressInputSchema).optional(),
+    reply_to: z.array(AddressInputSchema).optional(),
+    subject: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    keywords: z.array(KeywordSchema).optional(),
     send: z.boolean().default(false),
     confirm_token: ConfirmTokenSchema,
     ...bodyReadArgs,
@@ -780,6 +791,14 @@ async function replyHandler(
     quote?: boolean;
     attachments?: AttachmentArg[];
     identity_id?: string;
+    from?: { name?: string; email: string };
+    to?: { name?: string; email: string }[];
+    cc?: { name?: string; email: string }[];
+    bcc?: { name?: string; email: string }[];
+    reply_to?: { name?: string; email: string }[];
+    subject?: string;
+    headers?: Record<string, string>;
+    keywords?: string[];
     send: boolean;
     confirm_token?: string;
     account_id?: string;
@@ -797,8 +816,11 @@ async function replyHandler(
     fetchMailboxIndex(ctx.jmap, ctx.actor, account),
   ]);
   const parent = await fetchEmailForReply(ctx, account, args.email_id);
+  // An explicit From binds the identity (envelope/DMARC alignment); otherwise the parent's
+  // To address is only a soft hint for which identity to reply as.
   const identity = pickIdentity(identities, {
     identityId: args.identity_id,
+    fromEmail: args.from?.email,
     preferEmail: firstAddressEmail(parent.to) ?? undefined,
   });
 
@@ -808,6 +830,14 @@ async function replyHandler(
     body_html: args.body_html,
     quote: args.quote,
     attachments: args.attachments?.map(coerceAttachment),
+    from: args.from,
+    to: args.to,
+    cc: args.cc,
+    bcc: args.bcc,
+    reply_to: args.reply_to,
+    subject: args.subject,
+    headers: args.headers,
+    keywords: args.keywords,
   });
   const plan = await planMessageAttachments(ctx, account, args.attachments);
 
