@@ -119,23 +119,60 @@ async function fetchIdentities(
   return Array.isArray(res.list) ? res.list as Identity[] : [];
 }
 
-/** Choose an Identity: explicit id → From-address match → first. Throws when none exist. */
+function addressDomain(addr: string): string {
+  const at = addr.lastIndexOf("@");
+  return at === -1 ? "" : addr.slice(at + 1).toLowerCase();
+}
+
+/**
+ * Choose an Identity. `fromEmail` is the message's From address and is binding: the chosen
+ * identity must share its domain (exact-address match preferred), because the identity sets the
+ * envelope MAIL FROM and the server signs DKIM for the envelope domain — a From/envelope domain
+ * mismatch produces unaligned SPF+DKIM and gets rejected by p=reject DMARC receivers.
+ * `preferEmail` is only a hint (reply paths): exact/domain match if possible, else first identity.
+ */
 function pickIdentity(
   identities: Identity[],
-  opts: { identityId?: string; fromEmail?: string },
+  opts: { identityId?: string; fromEmail?: string; preferEmail?: string },
 ): Identity {
   if (identities.length === 0) {
     throw new Error("account has no send identities (Identity/get returned none)");
   }
+  const wanted = opts.fromEmail ? normalizeAddress(opts.fromEmail) : undefined;
   if (opts.identityId) {
     const byId = identities.find((i) => i.id === opts.identityId);
     if (!byId) throw new Error(`identity_id "${opts.identityId}" not found`);
+    if (wanted && addressDomain(normalizeAddress(byId.email)) !== addressDomain(wanted)) {
+      throw new Error(
+        `identity_id "${opts.identityId}" (${byId.email}) does not match the From address ` +
+          `${opts.fromEmail} — the envelope domain must equal the From domain or the message ` +
+          `fails DMARC alignment at strict receivers. Use the identity for ` +
+          `${addressDomain(wanted)} or omit identity_id to auto-match.`,
+      );
+    }
     return byId;
   }
-  if (opts.fromEmail) {
-    const wanted = normalizeAddress(opts.fromEmail);
+  if (wanted) {
     const byAddr = identities.find((i) => normalizeAddress(i.email) === wanted);
     if (byAddr) return byAddr;
+    const byDomain = identities.find((i) =>
+      addressDomain(normalizeAddress(i.email)) === addressDomain(wanted)
+    );
+    if (byDomain) return byDomain;
+    throw new Error(
+      `no send identity matches From ${opts.fromEmail} (domain ${addressDomain(wanted)}); ` +
+        `sending would use a mismatched envelope and fail DMARC. Available identities: ` +
+        identities.map((i) => i.email).join(", "),
+    );
+  }
+  if (opts.preferEmail) {
+    const hint = normalizeAddress(opts.preferEmail);
+    const byAddr = identities.find((i) => normalizeAddress(i.email) === hint);
+    if (byAddr) return byAddr;
+    const byDomain = identities.find((i) =>
+      addressDomain(normalizeAddress(i.email)) === addressDomain(hint)
+    );
+    if (byDomain) return byDomain;
   }
   return identities[0];
 }
@@ -757,7 +794,7 @@ async function replyHandler(
   const parent = await fetchEmailForReply(ctx, account, args.email_id);
   const identity = pickIdentity(identities, {
     identityId: args.identity_id,
-    fromEmail: firstAddressEmail(parent.to) ?? undefined,
+    preferEmail: firstAddressEmail(parent.to) ?? undefined,
   });
 
   const create = buildReply(parent, identity, ownAddresses(identities), {
@@ -913,8 +950,12 @@ async function sendHandler(
 
   // Path A: submit an existing draft.
   if (args.draft_id) {
-    const identity = pickIdentity(identities, { identityId: args.identity_id });
-    const recipientCount = await draftRecipientCount(ctx, account, args.draft_id);
+    const draft = await draftSendFacts(ctx, account, args.draft_id);
+    const identity = pickIdentity(identities, {
+      identityId: args.identity_id,
+      fromEmail: draft.fromEmail,
+    });
+    const recipientCount = draft.recipientCount;
     const gateResult = await gate(ctx, {
       op: "mail.send",
       accountId: account.accountId,
@@ -1005,18 +1046,26 @@ async function sendHandler(
 }
 
 /** Count recipients on an existing draft (for the gate). Best-effort — 0 on read failure. */
-async function draftRecipientCount(ctx: OpContext, account: AccountRef, id: Id): Promise<number> {
+/** From address + recipient count of a stored draft, for identity binding and the send gate. */
+async function draftSendFacts(
+  ctx: OpContext,
+  account: AccountRef,
+  id: Id,
+): Promise<{ recipientCount: number; fromEmail?: string }> {
   try {
     const res = await ctx.jmap.call(ctx.actor, using(USING.mail), "Email/get", {
       accountId: account.accountId,
       ids: [id],
-      properties: ["to", "cc", "bcc"],
+      properties: ["from", "to", "cc", "bcc"],
     });
     const email = Array.isArray(res.list) ? (res.list as Email[])[0] : undefined;
-    if (!email) return 0;
-    return countRecipients(email as unknown as EmailCreatePayload);
+    if (!email) return { recipientCount: 0 };
+    return {
+      recipientCount: countRecipients(email as unknown as EmailCreatePayload),
+      fromEmail: firstAddressEmail(email.from) ?? undefined,
+    };
   } catch {
-    return 0;
+    return { recipientCount: 0 };
   }
 }
 

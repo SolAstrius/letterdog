@@ -634,12 +634,19 @@ function registerSendTools(server: McpServer, config: EnvConfig): void {
         args.account_id,
       );
       const mailboxes = await getMailboxes(context, account);
+      const draftGet = await context.jmap.single(account, SUBMISSION_USING, "Email/get", {
+        accountId: account.accountId,
+        ids: [args.draft_email_id],
+        properties: ["from"],
+      });
+      const draftFrom = (objectList(draftGet)[0]?.from as { email?: string }[] | undefined)
+        ?.[0]?.email;
       const payload = {
         accountId: account.accountId,
         create: {
           send: {
             emailId: args.draft_email_id,
-            identityId: await resolveIdentityId(context, account, args.identity_id),
+            identityId: await resolveIdentityId(context, account, args.identity_id, draftFrom),
             ...(args.envelope ? { envelope: args.envelope } : {}),
           },
         },
@@ -691,7 +698,12 @@ function registerSendTools(server: McpServer, config: EnvConfig): void {
         mailboxIds: [draftsId],
         keywords: { "$draft": true, "$seen": true },
       });
-      const identityId = await resolveIdentityId(context, account, args.identity_id);
+      const identityId = await resolveIdentityId(
+        context,
+        account,
+        args.identity_id,
+        (args.message as ComposeEmail).from?.email,
+      );
       const invocation = {
         using: SUBMISSION_USING,
         methodCalls: [
@@ -1488,21 +1500,59 @@ function sentEmailPatch(mailboxes: MailboxSummary[]): Record<string, unknown> {
   return patch;
 }
 
+function identityDomain(addr: string): string {
+  const at = addr.lastIndexOf("@");
+  return at === -1 ? "" : addr.slice(at + 1).toLowerCase();
+}
+
+/**
+ * Resolve the sending identity. When the message's From address is known it is binding: the
+ * identity must share its domain (exact match preferred) — the identity sets the envelope
+ * MAIL FROM, and the server DKIM-signs for the envelope domain, so a From/envelope domain
+ * mismatch yields unaligned SPF+DKIM and a reject from p=reject DMARC receivers.
+ */
 async function resolveIdentityId(
   context: ToolContext,
   account: AccountContext,
   requestedIdentityId?: string,
+  fromEmail?: string,
 ): Promise<string> {
-  if (requestedIdentityId) return requestedIdentityId;
+  if (requestedIdentityId && !fromEmail) return requestedIdentityId;
   const identityGet = await context.jmap.single(account, SUBMISSION_USING, "Identity/get", {
     accountId: account.accountId,
     ids: null,
   });
-  const first = objectList(identityGet).find((identity) => typeof identity.id === "string");
-  if (!first?.id || typeof first.id !== "string") {
-    throw new Error("No JMAP identity is available for sending.");
+  const identities = objectList(identityGet).filter((identity) =>
+    typeof identity.id === "string" && typeof identity.email === "string"
+  ) as { id: string; email: string }[];
+  if (identities.length === 0) throw new Error("No JMAP identity is available for sending.");
+  const wanted = fromEmail?.trim().toLowerCase();
+  if (requestedIdentityId) {
+    const byId = identities.find((i) => i.id === requestedIdentityId);
+    if (byId && wanted && identityDomain(byId.email.toLowerCase()) !== identityDomain(wanted)) {
+      throw new Error(
+        `identity_id "${requestedIdentityId}" (${byId.email}) does not match the From address ` +
+          `${fromEmail} — the envelope domain must equal the From domain or the message fails ` +
+          `DMARC alignment at strict receivers. Use the identity for ` +
+          `${identityDomain(wanted)} or omit identity_id to auto-match.`,
+      );
+    }
+    return requestedIdentityId;
   }
-  return first.id;
+  if (wanted) {
+    const byAddr = identities.find((i) => i.email.toLowerCase() === wanted);
+    if (byAddr) return byAddr.id;
+    const byDomain = identities.find((i) =>
+      identityDomain(i.email.toLowerCase()) === identityDomain(wanted)
+    );
+    if (byDomain) return byDomain.id;
+    throw new Error(
+      `no send identity matches From ${fromEmail} (domain ${identityDomain(wanted)}); sending ` +
+        `would use a mismatched envelope and fail DMARC. Available identities: ` +
+        identities.map((i) => i.email).join(", "),
+    );
+  }
+  return identities[0].id;
 }
 
 async function guardedEmailSet(
